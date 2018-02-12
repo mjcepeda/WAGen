@@ -9,7 +9,6 @@ import org.junit.Test;
 import edu.rit.wagen.database.impl.DatabaseImpl;
 import edu.rit.wagen.dto.Schema;
 import edu.rit.wagen.dto.TableDescription;
-import edu.rit.wagen.sqp.impl.operator.Table;
 
 public class DatabaseTest {
 
@@ -21,9 +20,9 @@ public class DatabaseTest {
 		schema.addTable(table);
 		DatabaseImpl db = new DatabaseImpl();
 		try {
-			db.createSchema(schema);
-			Table t = new Table("customer", columns, 10, table);
-			t.open();
+			db.createSchema("sampleWAGen");
+//			Table t = new Table("customer", 10, table);
+//			t.open();
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

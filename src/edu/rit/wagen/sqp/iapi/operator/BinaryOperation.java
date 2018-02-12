@@ -3,18 +3,20 @@ package edu.rit.wagen.sqp.iapi.operator;
 /**
  * The Class BinaryOperation.
  */
-public abstract class BinaryOperation extends Operator {
+public abstract class BinaryOperation extends RAOperator {
 
 	/** The left source. */
-	private Operator leftSource;
+	private RAOperator leftSource;
 
 	/** The right source. */
-	private Operator rightSource;
+	private RAOperator rightSource;
 
 	
-	public BinaryOperation(Operator leftSource, Operator rightSource) {
+	public BinaryOperation(RAOperator leftSource, RAOperator rightSource, String sbSchema, String realSchema) {
+		super(sbSchema, realSchema);
 		this.leftSource = leftSource;
 		this.rightSource = rightSource;
+		this._counter = 0;
 	}
 
 	/**
@@ -22,7 +24,7 @@ public abstract class BinaryOperation extends Operator {
 	 *
 	 * @return the leftSource
 	 */
-	public Operator getLeftSource() {
+	public RAOperator getLeftSource() {
 		return leftSource;
 	}
 
@@ -32,7 +34,7 @@ public abstract class BinaryOperation extends Operator {
 	 * @param leftSource
 	 *            the leftSource to set
 	 */
-	public void setLeftSource(Operator leftSource) {
+	public void setLeftSource(RAOperator leftSource) {
 		this.leftSource = leftSource;
 	}
 
@@ -41,7 +43,7 @@ public abstract class BinaryOperation extends Operator {
 	 *
 	 * @return the rightSource
 	 */
-	public Operator getRightSource() {
+	public RAOperator getRightSource() {
 		return rightSource;
 	}
 
@@ -51,7 +53,7 @@ public abstract class BinaryOperation extends Operator {
 	 * @param rightSource
 	 *            the rightSource to set
 	 */
-	public void setRightSource(Operator rightSource) {
+	public void setRightSource(RAOperator rightSource) {
 		this.rightSource = rightSource;
 	}
 

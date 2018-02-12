@@ -1,6 +1,6 @@
 package edu.rit.wagen.dto;
 
-import edu.rit.wagen.utils.Constants.ConstraintType;
+import edu.rit.wagen.utils.Utils.ConstraintType;
 
 public class Constraint {
 

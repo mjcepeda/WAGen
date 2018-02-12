@@ -3,8 +3,8 @@ package edu.rit.wagen.dabatase.iapi;
 import java.sql.SQLException;
 import java.util.List;
 
-import edu.rit.wagen.dto.Schema;
-import edu.rit.wagen.dto.TableDescription;
+import edu.rit.wagen.dto.PTable;
+import edu.rit.wagen.dto.TableSchema;
 import edu.rit.wagen.dto.Tuple;
 
 /**
@@ -13,13 +13,17 @@ import edu.rit.wagen.dto.Tuple;
  */
 public interface Database {
 	
+	public void execCommand(String command) throws SQLException;
+	
+	public void execCommands(List<String> commands) throws SQLException;
+	
 	/**
 	 * Create database schema and PTable.
 	 *
 	 * @param schema the schema
 	 * @throws SQLException the SQL exception
 	 */
-	public void createSchema(Schema schema) throws SQLException;
+	public void createSchema(String schema) throws SQLException;
 
 	/**
 	 * Creates the table.
@@ -28,15 +32,16 @@ public interface Database {
 	 * @return true, if successful
 	 * @throws SQLException the SQL exception
 	 */
-	public boolean createTable(TableDescription table) throws SQLException;
+	public boolean createTable(TableSchema table) throws SQLException;
 
+	public TableSchema getOutputSchema(String schema, String table) throws SQLException;
 	/**
-	 * Insert a list of rows in a table.
+	 * Insert a list of symbolic data in a table.
 	 *
 	 * @param inserts            List of insert statements
 	 * @throws SQLException the SQL exception
 	 */
-	public void insertRows(List<String> inserts) throws SQLException;
+	public void insertSymbolicData(List<String> inserts) throws SQLException;
 
 	/**
 	 * Gets the data.
@@ -45,6 +50,8 @@ public interface Database {
 	 * @return the data
 	 * @throws SQLException the SQL exception
 	 */
-	public List<Tuple> getData(TableDescription table) throws SQLException;
+	public List<Tuple> getData(TableSchema table) throws SQLException;
+	
+	public void insertConstraints(String schemaName, List<PTable> constraints) throws SQLException;
 
 }
