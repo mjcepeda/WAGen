@@ -19,7 +19,7 @@ public class RAProjection extends UnaryOperation {
 	}
 
 	@Override
-	public Tuple getNext() {
+	public Tuple getNext() throws Exception{
 		//this operation does not add additional constraints
 		return source.getNext();
 	}

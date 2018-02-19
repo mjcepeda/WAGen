@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import edu.rit.wagen.database.impl.DatabaseImpl;
 import edu.rit.wagen.dto.TableSchema;
 import edu.rit.wagen.dto.Tuple;
 import edu.rit.wagen.sqp.iapi.operator.RAOperator;
@@ -20,7 +19,7 @@ import ra.RAXNode.TABLE;
  */
 public class RATable extends RAOperator {
 
-	private TableSchema tableSchema;
+	public TableSchema tableSchema;
 	/**
 	 * 0 - It does not exist into RDBMS 1 - Created and populated
 	 */
@@ -28,17 +27,13 @@ public class RATable extends RAOperator {
 	/**
 	 * All the tuples from the table
 	 */
-	private List<Tuple> tableScan;
+	private List<Tuple> result;
 	/**
 	 * Index to the last retrieved tuple
 	 */
-	private int indexTableScan;
+	private int indexResult;
 
 	private TABLE _node;
-	/**
-	 * Symbolic database class
-	 */
-	private DatabaseImpl db = new DatabaseImpl();
 
 	public RATable(TABLE node, int cardinality, String sbSchema, String realSchema) {
 		super(sbSchema, realSchema);
@@ -46,32 +41,32 @@ public class RATable extends RAOperator {
 		this._cardinality = cardinality;
 		this.tableSchema = null;
 		this.tableCreated = Boolean.FALSE;
-		this.tableScan = null;
-		this.indexTableScan = 0;
+		this._results = null;
+		this.indexResult = 0;
+		// this operation never has data pre-grouped since it is created unique
+		this._preGroupedList = null;
+		this._isPreGrouped = Boolean.FALSE;
 	}
 
 	/**
 	 * Creates the table and insert data until the cardinality is reached
 	 */
 	@Override
-	public void open() {
+	public void open() throws Exception {
 		// check if table is created
 		if (!tableCreated) {
 			// creating table
-			try {
-				tableSchema = db.getOutputSchema(_realSchema, _node.getTableName());
-				// setting the name of the symbolic database
-				tableSchema.setSchemaName(_sbSchema);
-				tableCreated = db.createTable(tableSchema);
-				if (tableCreated) {
-					// fill the table until it reaches cardinality value (table
-					// size)
-					fillTable();
-					// TODO MJCG - insert constraints in PTable - Use
-					// PredicateListener from Streams project
-				}
-			} catch (SQLException e) {
-				e.printStackTrace();
+			tableSchema = db.getOutputSchema(_realSchema, _node.getTableName());
+			// setting the name of the symbolic database
+			tableSchema.setSchemaName(_sbSchema);
+			tableCreated = db.createTable(tableSchema);
+			if (tableCreated) {
+				// fill the table until it reaches cardinality value (table
+				// size)
+				fillTable();
+				// TODO MJCG - insert constraints in PTable
+				// mysql does not support check predicates, so this operation is
+				// not possible
 			}
 		}
 	}
@@ -84,13 +79,13 @@ public class RATable extends RAOperator {
 	public Tuple getNext() {
 		// if the data is not loaded
 		// go to the database
-		if (tableScan == null) {
+		if (result == null) {
 			// perform table scan of the table
 			// and store all tuples in memory
 			try {
-				tableScan = db.getData(tableSchema);
-				// reset indexTableScan
-				indexTableScan = 0;
+				result = db.getData(tableSchema);
+				// reset indexResult
+				indexResult = 0;
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
@@ -98,25 +93,25 @@ public class RATable extends RAOperator {
 		// get the next tuple
 		Tuple tuple = null;
 		// returns null if all tuples have been returned
-		if (indexTableScan < tableScan.size()) {
-			tuple = tableScan.get(indexTableScan);
+		if (indexResult < result.size()) {
+			tuple = result.get(indexResult);
 			// increment the index
-			indexTableScan++;
+			indexResult++;
 		}
 		return tuple;
 	}
 
 	@Override
 	public void close() {
-		// reset tableScan and the index
-		tableScan = null;
-		indexTableScan = 0;
+		// reset result and the index
+		result = null;
+		indexResult = 0;
 	}
 
 	/**
 	 * Fill table with symbolic data
 	 */
-	private void fillTable() {
+	private void fillTable() throws Exception{
 		// creating list of numbers
 		List<Integer> numbers = Stream.iterate(1, n -> n + 1).limit(_cardinality).collect(Collectors.toList());
 		List<String> inserts = new ArrayList<>();
@@ -135,12 +130,9 @@ public class RATable extends RAOperator {
 			// adding insert statement to the list
 			inserts.add(row.toString());
 		}
-		try {
-			// inserting all the rows
-			db.insertSymbolicData(inserts);
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
+
+		// inserting all the rows
+		db.insertSymbolicData(inserts);
 	}
 
 	private void insertConstraints() {
