@@ -329,11 +329,20 @@ public abstract class RAXNode {
 		public String toPrintString() {
 			return "\\join_" + printRaId() + "{" + _condition + "}";
 		}
+		
+		public String getCondition() {
+			return _condition;
+		}
 
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
-			//TODO MJCG I need to change this when I implement the join operation
-			return new RAEquiJoin(this, getChild(0).getOperator(mapConstraints, sbSchema, realSchema), getChild(1).getOperator(mapConstraints, sbSchema, realSchema), sbSchema, realSchema);
+			if (_condition == null || _condition.trim().equals("")) {
+				throw new Exception("Join condition not found");
+			}
+			RAAnnotation annotation = mapConstraints.get(_raId);
+			RAOperator op = new RAEquiJoin(this, getChild(0).getOperator(mapConstraints, sbSchema, realSchema), getChild(1).getOperator(mapConstraints, sbSchema, realSchema), annotation, sbSchema, realSchema);
+			op.open();
+			return op; 
 		}
 	}
 
