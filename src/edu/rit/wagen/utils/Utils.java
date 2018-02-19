@@ -33,7 +33,7 @@ public class Utils {
 	/** The Constant NOT LIKE. */
 	public static final String NOT_LIKE = "not like";
 	
-	private static final String[] operators = { DISTINCT, EQUALS, GREQ, LEQ, GRE, LESS, LIKE, NOT_LIKE };
+	public static final String[] operators = { DISTINCT, EQUALS, GREQ, LEQ, GRE, LESS, LIKE, NOT_LIKE };
 	
 
 	public enum ConstraintType {
@@ -42,22 +42,22 @@ public class Utils {
 		/* PK, FK, UNIQUE, NOT_NULL, */ CHECK
 	}
 
-	public static Map<String, List<String>> parsePredicate(String predicate) {
+	public static Map<String, List<String>> parsePredicate(String predicate) throws Exception {
 		Map<String, List<String>> mapPredicate = new HashMap<>();
-		//TODO MJCG all the predicates are in CNF (conjunctive normal form)
+		//all the predicates are in CNF (conjunctive normal form)
 		String[] conditions = predicate.split(AND);
 		for (String c : conditions) {
 			boolean foundOP = false;
 			int index = 0;
 			String left=null;
-			String right=null;
 			while (!foundOP && index < operators.length) {
 				if (c.toLowerCase().contains(operators[index])) {
-					//TODO MJCG So far, I am asumming that the predicate always has the attribute name in the left
+					//Assume that the predicate always has the attribute name in the left
+					//getting the attribute involve in the predicate
 					left = c.substring(0, c.toLowerCase().indexOf(operators[index])).trim();
-					right = c.substring(c.toLowerCase().indexOf(operators[index]), c.length()).trim().replaceAll(operators[index], "");
+//					right = c.substring(c.toLowerCase().indexOf(operators[index]), c.length()).trim().replaceAll(operators[index], "");
 					List<String> predicates = null;
-					//if that attribute appears in more than one condition
+					//if an attribute appears in more than one condition
 					//update its list of predicates
 					if (mapPredicate.containsKey(left)) {
 						predicates = mapPredicate.get(left);
@@ -65,10 +65,15 @@ public class Utils {
 						predicates = new ArrayList<>();
 					}
 					predicates.add(c.replaceAll("'", "\""));
+					//map with attribute as key, list of conditions as value
 					mapPredicate.put(left, predicates);
+					//activate flag
 					foundOP = true;
 				}
 				index++;
+			}
+			if (!foundOP) {
+				throw new Exception("Unexpected operator symbol in: " + c);
 			}
 		}
 		return mapPredicate;
