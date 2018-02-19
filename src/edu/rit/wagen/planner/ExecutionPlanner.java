@@ -8,6 +8,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -41,7 +43,9 @@ public class ExecutionPlanner {
 	public void init(List<String> sqlCommands, List<RAQuery> queries) {
 		_count = 0;
 		if (sqlCommands != null && sqlCommands.size() > 0) {
-			//first, we create the real database 
+			// init list of schemas
+			listSchemas = new ArrayList<>();
+			// first, we create the real database
 			// this list must have only the create table statements
 			// the system will create the schema automatically
 			String schemaName = db.createDB(sqlCommands);
@@ -84,21 +88,22 @@ public class ExecutionPlanner {
 
 	private void createSymbolicDB(RAQuery ra, String realSchema) {
 		try {
-			//TODO MJCG If there is an exception the symbolic database must be deleted
-			//and the real database too
 			if (ra.getConstraints() != null) {
 				_count++;
-				//creating name for the symbolic database
+				// creating name for the symbolic database
 				String sbSchema = "sb" + _count;
 				// create temp file with the query on it
 				File tmpFile = createFile(ra.getQuery());
 				// invoke RA.parser
 				RAXNode rax = invokeParser(tmpFile);
-				//create new symbolic db
+				// create new symbolic db
 				db.createSchema(sbSchema);
-				//create PTable
+				// add schema to the list
+				listSchemas.add(sbSchema);
+				// create PTable
 				db.executeCommand(PTABLE.replaceAll("NAME", sbSchema));
-				// get the relational algebra tree and set the constrainst for every operation
+				// get the relational algebra tree and set the constrainst for
+				// every operation
 				RAOperator raNode = rax.getOperator(ra.getConstraints(), sbSchema, realSchema);
 				Tuple t = raNode.getNext();
 				while (t != null) {
@@ -108,12 +113,24 @@ public class ExecutionPlanner {
 				err.println("Size of the tables not specified");
 			}
 		} catch (IOException e) {
+			// delete all the databases
+			listSchemas.add(realSchema);
+			rollback();
 			e.printStackTrace();
 		} catch (RecognitionException e) {
+			// delete all the databases
+			listSchemas.add(realSchema);
+			rollback();
 			e.printStackTrace();
 		} catch (TokenStreamException e) {
+			// delete all the databases
+			listSchemas.add(realSchema);
+			rollback();
 			e.printStackTrace();
 		} catch (Exception e) {
+			// delete all the databases
+			listSchemas.add(realSchema);
+			rollback();
 			e.printStackTrace();
 		}
 	}
@@ -148,6 +165,19 @@ public class ExecutionPlanner {
 	}
 
 	private void tranverseTree(RAOperator raOp, Map<Integer, RAAnnotation> mapConstraints) {
-		
+		// TODO MJCG In progress
+	}
+
+	/**
+	 * Delete all the databases (symbolic and real)
+	 */
+	private void rollback() {
+		listSchemas.forEach(schema -> {
+			try {
+				db.dropSchema(schema);
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		});
 	}
 }
