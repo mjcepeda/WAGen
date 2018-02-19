@@ -38,4 +38,7 @@ public class DatabaseBO {
 		db.execCommand(command);
 	}
 
+	public void dropSchema(String schema) throws SQLException {
+		db.execCommand("drop schema " + schema);
+	}
 }

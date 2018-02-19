@@ -88,7 +88,6 @@ public class DatabaseImpl implements Database {
 				ps.close();
 			}
 		}
-
 	}
 
 	/*
@@ -188,6 +187,7 @@ public class DatabaseImpl implements Database {
 		try {
 			conn = getConnection();
 			s = conn.createStatement();
+			// TODO MJCG Change for parametric query
 			ResultSet rs = s.executeQuery("select * from " + schema + "." + table);
 			ResultSetMetaData rsmd = rs.getMetaData();
 			int numCols = rsmd.getColumnCount();
@@ -211,6 +211,42 @@ public class DatabaseImpl implements Database {
 			}
 		}
 		return new TableSchema(schema, table, colNames, colTypes);
+	}
+
+	public TableSchema getReferencedTable(String realSchema, TableSchema table, String referencedColumn)
+			throws SQLException {
+		Connection conn = null;
+		PreparedStatement s = null;
+		String referencedTable = null;
+		TableSchema tableR = null;
+		try {
+			conn = getConnection();
+			String query = new String(
+					"select referenced_table_name from information_schema.key_column_usage where table_schema = ? "
+							+ "and table_name = ? and referenced_column_name = ?");
+			s = conn.prepareStatement(query);
+			s.setString(1, realSchema);
+			s.setString(2, table.getTableName());
+			s.setString(3, referencedColumn);
+			ResultSet rs = s.executeQuery();
+			if (rs.next()) {
+				referencedTable = rs.getString(1);
+				if (referencedTable != null) {
+					tableR = getOutputSchema(realSchema, referencedTable);
+				}
+			}
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (s != null) {
+				s.close();
+			}
+		}
+		return tableR;
 	}
 
 	public List<Tuple> getData(TableSchema table) throws SQLException {
@@ -289,9 +325,9 @@ public class DatabaseImpl implements Database {
 	private String createTableString(TableSchema table) {
 		StringBuffer sb = new StringBuffer("CREATE TABLE ").append(table.getSchemaName()).append(".")
 				.append(table.getTableName()).append("( ");
-		String columns = table.getColNames().stream().collect(Collectors.joining(" varchar(100), "));
+		String columns = table.getColNames().stream().collect(Collectors.joining(" varchar(200), "));
 		sb.append(columns);
-		sb.append(" varchar(100))");
+		sb.append(" varchar(200))");
 		return sb.toString();
 	}
 
