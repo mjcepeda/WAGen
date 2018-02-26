@@ -11,16 +11,15 @@ import java.io.PrintStream;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 
 import antlr.CommonAST;
 import antlr.RecognitionException;
 import antlr.TokenStreamException;
 import edu.rit.wagen.database.impl.DatabaseBO;
-import edu.rit.wagen.dto.RAAnnotation;
 import edu.rit.wagen.dto.RAQuery;
 import edu.rit.wagen.dto.Tuple;
+import edu.rit.wagen.instantiator.DataInstantiator;
 import edu.rit.wagen.sqp.iapi.operator.RAOperator;
 import ra.RALexer;
 import ra.RAParser;
@@ -29,16 +28,17 @@ import ra.RAXNode;
 
 public class ExecutionPlanner {
 
-	DatabaseBO db = new DatabaseBO();
+	protected DatabaseBO db = new DatabaseBO();
 	protected static PrintStream out = System.out;
 	protected static PrintStream err = System.err;
 	protected static Random random = new Random();
 	protected int _count;
-	// we need to store the temo schemas to delete them at the end
+	// we need to store the temp schemas to delete them at the end
 	protected List<String> listSchemas;
+	
 
 	/** The Constant PTABLE. */
-	private final static String PTABLE = "CREATE TABLE NAME.PTABLE (SYMBOL VARCHAR(100), PREDICATE varchar(200))";
+	private final static String PTABLE = "CREATE TABLE <SCHEMA_NAME>.PTABLE (SYMBOL VARCHAR(100), PREDICATE varchar(200))";
 
 	public void init(List<String> sqlCommands, List<RAQuery> queries) {
 		_count = 0;
@@ -53,7 +53,8 @@ public class ExecutionPlanner {
 			// the queries are relational algebra expressions, no SQL queries
 			// run in parallel
 			queries.parallelStream().forEach(ra -> createSymbolicDB(ra, schemaName));
-
+			//delete all the symbolic databases
+			rollback();
 		} else {
 			err.println("Missing Schema definition");
 		}
@@ -101,7 +102,7 @@ public class ExecutionPlanner {
 				// add schema to the list
 				listSchemas.add(sbSchema);
 				// create PTable
-				db.executeCommand(PTABLE.replaceAll("NAME", sbSchema));
+				db.executeCommand(PTABLE.replaceAll("<SCHEMA_NAME>", sbSchema));
 				// get the relational algebra tree and set the constrainst for
 				// every operation
 				RAOperator raNode = rax.getOperator(ra.getConstraints(), sbSchema, realSchema);
@@ -109,6 +110,9 @@ public class ExecutionPlanner {
 				while (t != null) {
 					t = raNode.getNext();
 				}
+				//TODO MJCG This is a temporal location for this call
+				DataInstantiator instantiator = new DataInstantiator(realSchema, sbSchema);
+				instantiator.generateData();
 			} else {
 				err.println("Size of the tables not specified");
 			}
@@ -164,12 +168,8 @@ public class ExecutionPlanner {
 		out.println("=====");
 	}
 
-	private void tranverseTree(RAOperator raOp, Map<Integer, RAAnnotation> mapConstraints) {
-		// TODO MJCG In progress
-	}
-
 	/**
-	 * Delete all the databases (symbolic and real)
+	 * Delete the list of databases 
 	 */
 	private void rollback() {
 		listSchemas.forEach(schema -> {

@@ -4,41 +4,22 @@ import edu.rit.wagen.utils.Utils.ConstraintType;
 
 public class Constraint {
 
-	private ConstraintType type;
-	private String predicate;
+	public ConstraintType type;
+	public String column;
+	public String referencedColumn;
+	public String referencedTable;
+	//if case the constraint is CHECK
+	public String predicate;
 
 	public Constraint(ConstraintType type, String predicate) {
 		this.type = type;
 		this.predicate = predicate;
 	}
 
-	/**
-	 * @return the type
-	 */
-	public ConstraintType getType() {
-		return type;
-	}
-
-	/**
-	 * @param type
-	 *            the type to set
-	 */
-	public void setType(ConstraintType type) {
+	public Constraint(ConstraintType type, String c, String rc, String rtable) {
 		this.type = type;
-	}
-
-	/**
-	 * @return the predicate
-	 */
-	public String getPredicate() {
-		return predicate;
-	}
-
-	/**
-	 * @param predicate
-	 *            the predicate to set
-	 */
-	public void setPredicate(String predicate) {
-		this.predicate = predicate;
+		this.column = c;
+		this.referencedColumn = rc;
+		this.referencedTable = rtable;
 	}
 }

@@ -2,9 +2,9 @@ package edu.rit.wagen.sqp.impl.operator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import edu.rit.wagen.dto.PTable;
+import edu.rit.wagen.dto.Predicate;
 import edu.rit.wagen.dto.RAAnnotation;
 import edu.rit.wagen.dto.Tuple;
 import edu.rit.wagen.sqp.iapi.operator.RAOperator;
@@ -21,10 +21,10 @@ import ra.RAXNode.SELECT;
 public class RASelect extends UnaryOperation {
 
 	private SELECT _node;
-	/**
-	 * k - name of the attribute v - list of predicates for the attribute
-	 */
-	public Map<String, List<String>> mapPredicate;
+	//TODO MJCG this approach does not work for predicates like age > 20 and age < 40
+	//the negation of that predicate is age <20 or age>40, but we do not contemplate or conditional formulas
+	//the system generatas age < 20 and age > 40, which it is a contradiction
+	public List<Predicate> predicates;
 
 	public RASelect(RAOperator source, SELECT node, RAAnnotation constraints, String sbSchema, String realSchema)
 			throws Exception {
@@ -40,7 +40,7 @@ public class RASelect extends UnaryOperation {
 		if (source instanceof RAEquiJoin) {
 			throw new Exception("Not supported selection operation on top of join operation");
 		}
-		//this version peration does not support pre-grouped attributes
+		// this version peration does not support pre-grouped attributes
 		_preGroupedList = null;
 		_isPreGrouped = Boolean.FALSE;
 	}
@@ -48,7 +48,7 @@ public class RASelect extends UnaryOperation {
 	@Override
 	public void open() throws Exception {
 		// parsing predicate
-		mapPredicate = Utils.parsePredicate(_node.getCondition());
+		predicates = Utils.parsePredicate(_node.getCondition().toUpperCase());
 	}
 
 	@Override
@@ -142,15 +142,16 @@ public class RASelect extends UnaryOperation {
 		});
 	}
 
-	private List<PTable> getPredicateBySymbol(Tuple tuple) {
+	private List<PTable> getPredicateBySymbol(Tuple tuple) throws Exception{
 		List<PTable> constraints = new ArrayList<>();
 		// iterate over all contraints and create a PTable object
-		for (Map.Entry<String, List<String>> entry : mapPredicate.entrySet()) {
-			for (String predicate : entry.getValue()) {
-				String value = tuple.getValues().get(entry.getKey().toUpperCase());
-				PTable p = new PTable(value, Utils.updatePredicate(predicate, value));
-				constraints.add(p);
+		for (Predicate predicate : predicates) {
+			String value = tuple.getValues().get(predicate.symbol);
+			if (value== null) {
+				throw new Exception ("Column " + predicate.symbol + " does not found in the database");
 			}
+			PTable p = new PTable(value, value + predicate.op + predicate.condition);
+			constraints.add(p);
 		}
 		return constraints;
 	}

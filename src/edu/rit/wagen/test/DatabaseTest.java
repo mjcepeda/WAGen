@@ -9,10 +9,11 @@ import org.junit.Test;
 import edu.rit.wagen.database.impl.DatabaseImpl;
 import edu.rit.wagen.dto.Schema;
 import edu.rit.wagen.dto.TableDescription;
+import edu.rit.wagen.dto.TableSchema;
 
 public class DatabaseTest {
 
-	@Test
+	//@Test
 	public void test() {
 		Schema schema = new Schema("sampleWAGen");
 		List<String> columns = Arrays.asList("id", "name", "age");
@@ -25,6 +26,19 @@ public class DatabaseTest {
 //			t.open();
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	@Test
+	public void getTableList() {
+		DatabaseImpl db = new DatabaseImpl();
+		try {
+			List<TableSchema> l = db.getTableList("sampleWAGen");
+			if (l ==null) {
+				System.out.println("no working");
+			}
+		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}

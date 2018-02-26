@@ -45,7 +45,7 @@ public class RAEquiJoin extends BinaryOperation {
 	private Tuple r;
 
 	public RAEquiJoin(JOIN node, RAOperator leftSource, RAOperator rightSource, RAAnnotation constraints,
-			String sbSchemaName, String realSchema) {
+			String sbSchemaName, String realSchema) throws Exception{
 		super(leftSource, rightSource, sbSchemaName, realSchema);
 		reset();
 		_results = new ArrayList<>();
@@ -64,6 +64,7 @@ public class RAEquiJoin extends BinaryOperation {
 		} else if (constraints.getDistType() == null || constraints.getDistType().equals(DistributionType.NA)) {
 			// default distribution type
 			_disType = DistributionType.UNIFORM;
+			_cardinality = constraints.getCardinality();
 		} else {
 			_cardinality = constraints.getCardinality();
 			_disType = constraints.getDistType();
@@ -100,12 +101,12 @@ public class RAEquiJoin extends BinaryOperation {
 		tableS = tableOp.tableSchema;
 		// getting the table description from the join attribute of the left
 		// source (R)
-		try {
-			tableR = db.getReferencedTable(_realSchema, tableS, j);
-			tableR.setSchemaName(sbSchemaName);
-		} catch (SQLException e) {
-			e.printStackTrace();
+		tableR = db.getReferencedTable(_realSchema, tableS, j);
+		if (tableR == null) {
+			throw new Exception("Column " + j + " not found in table " + tableS.getTableName());
 		}
+		tableR.setSchemaName(sbSchemaName);
+
 	}
 
 	@Override
@@ -269,6 +270,12 @@ public class RAEquiJoin extends BinaryOperation {
 	}
 
 	private void negativeJoinCase1() throws Exception {
+		// check if the left source is also a EquiJoin
+		if (getLeftSource() instanceof RAEquiJoin) {
+			// force to process the rest of its tuples in negative way
+			getLeftSource()._counter = getLeftSource()._cardinality;
+			getLeftSource().getNext();
+		}
 		Tuple t = getRightSource().getNext();
 		if (t != null) {
 			// extract from the results list the list of js already used

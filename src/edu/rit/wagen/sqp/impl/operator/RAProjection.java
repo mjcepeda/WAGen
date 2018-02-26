@@ -12,6 +12,7 @@ public class RAProjection extends UnaryOperation {
 	public RAProjection(RAOperator source, PROJECT node, String sbSchema, String realSchema) {
 		super(source, sbSchema, realSchema);
 		this._node = node;
+		this._cardinality = source._cardinality;
 	}
 
 	@Override

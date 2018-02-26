@@ -8,15 +8,20 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 import edu.rit.wagen.dabatase.iapi.Database;
+import edu.rit.wagen.dto.Constraint;
 import edu.rit.wagen.dto.PTable;
+import edu.rit.wagen.dto.Predicate;
 import edu.rit.wagen.dto.TableSchema;
 import edu.rit.wagen.dto.Tuple;
+import edu.rit.wagen.utils.Utils;
+import edu.rit.wagen.utils.Utils.ConstraintType;
 
 /**
  * The Class DatabaseImpl.
@@ -60,6 +65,7 @@ public class DatabaseImpl implements Database {
 
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.rollback();
@@ -80,6 +86,7 @@ public class DatabaseImpl implements Database {
 			ps.execute();
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.close();
@@ -106,6 +113,7 @@ public class DatabaseImpl implements Database {
 			ps.executeUpdate();
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.close();
@@ -134,6 +142,7 @@ public class DatabaseImpl implements Database {
 			created = ps.execute();
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.close();
@@ -168,6 +177,7 @@ public class DatabaseImpl implements Database {
 
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.close();
@@ -182,26 +192,45 @@ public class DatabaseImpl implements Database {
 	public TableSchema getOutputSchema(String schema, String table) throws SQLException {
 		ArrayList<String> colNames = new ArrayList<String>();
 		ArrayList<String> colTypes = new ArrayList<String>();
+		List<Constraint> colContraints = new ArrayList<Constraint>();
 		Connection conn = null;
 		Statement s = null;
+		PreparedStatement st = null;
 		try {
 			conn = getConnection();
 			s = conn.createStatement();
-			// TODO MJCG Change for parametric query
 			ResultSet rs = s.executeQuery("select * from " + schema + "." + table);
 			ResultSetMetaData rsmd = rs.getMetaData();
 			int numCols = rsmd.getColumnCount();
 			for (int i = 1; i <= numCols; i++) {
-				// Important: Use getColumnLabel() to get new column names
-				// specified
-				// in AS or in CREATE VIEW. For some JDBC drivers,
+				// For some JDBC drivers,
 				// getColumnName()
 				// gives the original column names inside base tables.
-				colNames.add(rsmd.getColumnLabel(i));
+				colNames.add(rsmd.getColumnName(i));
 				colTypes.add(rsmd.getColumnTypeName(i));
+			}
+			rs.close();
+			// get constraints info
+			st = conn.prepareStatement(
+					"select distinct CCU.COLUMN_NAME, constraint_type, REFERENCED_COLUMN_NAME, REFERENCED_TABLE_NAME "
+							+ "from INFORMATION_SCHEMA.TABLE_CONSTRAINTS as TC "
+							+ "inner join INFORMATION_SCHEMA.KEY_COLUMN_USAGE as CCU "
+							+ "on TC.CONSTRAINT_SCHEMA = CCU.CONSTRAINT_SCHEMA "
+							+ "and TC.CONSTRAINT_NAME = CCU.CONSTRAINT_NAME where ccu.TABLE_NAME = ? and tc.constraint_schema=?");
+			st.setString(1, table);
+			st.setString(2, schema);
+			rs = st.executeQuery();
+			while (rs.next()) {
+				String column = rs.getString(1);
+				String constraint = rs.getString(2);
+				String referenced_column = rs.getString(3);
+				String reference_table = rs.getString(4);
+				colContraints.add(
+						new Constraint(Utils.getConstraint(constraint), column, referenced_column, reference_table));
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.close();
@@ -210,9 +239,11 @@ public class DatabaseImpl implements Database {
 				s.close();
 			}
 		}
-		return new TableSchema(schema, table, colNames, colTypes);
+		return new TableSchema(schema, table, colNames, colTypes, colContraints);
 	}
 
+	// TODO MJCG Maybe this method is not neccessary, check if this info in the
+	// TableSchema
 	public TableSchema getReferencedTable(String realSchema, TableSchema table, String referencedColumn)
 			throws SQLException {
 		Connection conn = null;
@@ -238,6 +269,7 @@ public class DatabaseImpl implements Database {
 
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.close();
@@ -249,13 +281,41 @@ public class DatabaseImpl implements Database {
 		return tableR;
 	}
 
+	public String getSymbolValueCache(String schema, String symbol) throws SQLException {
+		Connection conn = null;
+		PreparedStatement s = null;
+		String value = null;
+		try {
+			conn = getConnection();
+			String query = new String("select value from " + schema + ".symbol_value_cache where symbol = ? ");
+			s = conn.prepareStatement(query);
+			s.setString(1, symbol);
+			ResultSet rs = s.executeQuery();
+			if (rs.next()) {
+				value = rs.getString(1);
+			}
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (s != null) {
+				s.close();
+			}
+		}
+		return value;
+	}
+
 	public List<Tuple> getData(TableSchema table) throws SQLException {
 		Connection conn = null;
-		PreparedStatement ps = null;
+		Statement statement = null;
 		List<Tuple> data = new ArrayList<Tuple>();
 		try {
-			Connection connection = getConnection();
-			Statement statement = connection.createStatement();
+			conn = getConnection();
+			statement = conn.createStatement();
 
 			String sql = "select * from " + table.getSchemaName() + "." + table.getTableName();
 			ResultSet rs = statement.executeQuery(sql);
@@ -272,6 +332,35 @@ public class DatabaseImpl implements Database {
 
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (statement != null) {
+				statement.close();
+			}
+		}
+		return data;
+	}
+
+	public String getPredicateValueCache(String schema, String pattern) throws SQLException {
+		Connection conn = null;
+		PreparedStatement ps = null;
+		String symbol = null;
+		try {
+			conn = getConnection();
+			String sql = "select symbol from " + schema + ".PREDICATE_VALUE_CACHE where predicate =?";
+			ps = conn.prepareStatement(sql);
+			ps.setString(1, pattern);
+			ResultSet rs = ps.executeQuery();
+			if (rs.next()) {
+				symbol = rs.getString(1);
+			}
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.close();
@@ -280,7 +369,7 @@ public class DatabaseImpl implements Database {
 				ps.close();
 			}
 		}
-		return data;
+		return symbol;
 	}
 
 	@Override
@@ -305,6 +394,7 @@ public class DatabaseImpl implements Database {
 
 		} catch (SQLException e) {
 			e.printStackTrace();
+			throw e;
 		} finally {
 			if (conn != null) {
 				conn.close();
@@ -313,6 +403,125 @@ public class DatabaseImpl implements Database {
 				ps.close();
 			}
 		}
+	}
+
+	// public void insertData (String schemaName, String tableName, List<Tuple>
+	// data) throws SQLException {
+	// Connection conn = null;
+	// PreparedStatement ps = null;
+	//
+	// try {
+	// // TODO This method will the method to insert data in the final concrete
+	// database
+	// conn = getConnection();
+	// // creating insert sql statement
+	// StringBuffer insert = new StringBuffer("insert into ").append(schemaName)
+	// .append(".").append("PTable (symbol, predicate) values ('%1','%2')");
+	// ps = conn.prepareStatement(insert.toString());
+	// // adding every insert into the batch
+	// for (PTable t : constraints) {
+	// String s = insert.toString().replaceAll("%1", t.symbol).replaceAll("%2",
+	// t.predicate);
+	// ps.addBatch(s);
+	// }
+	// // executing the batch
+	// ps.executeBatch();
+	//
+	// } catch (SQLException e) {
+	// e.printStackTrace();
+	// throw e;
+	// } finally {
+	// if (conn != null) {
+	// conn.close();
+	// }
+	// if (ps != null) {
+	// ps.close();
+	// }
+	// }
+	// }
+	//
+	public void insertSymbolicValueCache(String schemaName, String symbol, String value) throws SQLException {
+		Connection conn = null;
+		PreparedStatement ps = null;
+		try {
+			conn = getConnection();
+			// creating insert sql statement
+			StringBuffer insert = new StringBuffer("insert into ").append(schemaName)
+					.append(".symbol_value_cache (symbol, value) values ('" + symbol + "'," + value + ")");
+			ps = conn.prepareStatement(insert.toString());
+			ps.execute();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (ps != null) {
+				ps.close();
+			}
+		}
+	}
+
+	public List<TableSchema> getTableList(String schema) throws SQLException {
+		Connection conn = null;
+		PreparedStatement s = null;
+		List<TableSchema> tableList = new ArrayList<>();
+		try {
+			conn = getConnection();
+			String query = new String("select table_name from information_schema.tables where table_schema = ?");
+			s = conn.prepareStatement(query);
+			s.setString(1, schema);
+			ResultSet rs = s.executeQuery();
+			while (rs.next()) {
+				tableList.add(getOutputSchema(schema, rs.getString(1)));
+			}
+			//TODO MJCG Find a way to order the table statements so I do not have problems with constraints
+			//sort the list so there is no problems with the foreign keys
+			tableList.sort(Comparator.comparing(t -> t.getConstraints(ConstraintType.FK), Comparator.comparing(List::size)));
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (s != null) {
+				s.close();
+			}
+		}
+		return tableList;
+	}
+
+	public List<Predicate> getPredicates(String schema, String symbol) throws Exception {
+		Connection conn = null;
+		PreparedStatement s = null;
+		List<Predicate> predicateList = null;
+		try {
+			conn = getConnection();
+			String query = new String("select predicate from " + schema + ".ptable where symbol = ?");
+			s = conn.prepareStatement(query);
+			s.setString(1, symbol);
+			ResultSet rs = s.executeQuery();
+			while (rs.next()) {
+				if (predicateList == null) {
+					predicateList = new ArrayList<>();
+				}
+				predicateList.add(Utils.getPredicate(rs.getString(1)));
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (s != null) {
+				s.close();
+			}
+		}
+		return predicateList;
 	}
 
 	/**
