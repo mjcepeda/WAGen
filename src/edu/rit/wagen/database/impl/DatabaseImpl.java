@@ -244,7 +244,7 @@ public class DatabaseImpl implements Database {
 
 	// TODO MJCG Maybe this method is not neccessary, check if this info in the
 	// TableSchema
-	public TableSchema getReferencedTable(String realSchema, TableSchema table, String referencedColumn)
+	public TableSchema getReferencerTable(String realSchema, TableSchema table, String referencedColumn)
 			throws SQLException {
 		Connection conn = null;
 		PreparedStatement s = null;
@@ -253,8 +253,8 @@ public class DatabaseImpl implements Database {
 		try {
 			conn = getConnection();
 			String query = new String(
-					"select referenced_table_name from information_schema.key_column_usage where table_schema = ? "
-							+ "and table_name = ? and referenced_column_name = ?");
+					"select table_name from information_schema.key_column_usage where table_schema = ? "
+							+ "and referenced_table_name = ? and referenced_column_name = ?");
 			s = conn.prepareStatement(query);
 			s.setString(1, realSchema);
 			s.setString(2, table.getTableName());

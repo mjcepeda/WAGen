@@ -65,7 +65,7 @@ public interface Database {
 
 	public void insertConstraints(String schemaName, List<PTable> constraints) throws SQLException;
 
-	public TableSchema getReferencedTable(String realSchema, TableSchema table, String referencedColumn)
+	public TableSchema getReferencerTable(String realSchema, TableSchema table, String referencedColumn)
 			throws SQLException;
 
 	public List<TableSchema> getTableList(String schema) throws SQLException;

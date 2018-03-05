@@ -140,7 +140,7 @@ public class Utils {
 						.substring(predicate.toLowerCase().indexOf(COMPARATIVE_OPERATORS[index]), predicate.length())
 						.trim().replaceAll(COMPARATIVE_OPERATORS[index], "");
 				// predicates.add(c.replaceAll("'", "\""));
-				p = new Predicate(left, COMPARATIVE_OPERATORS[index], right);
+				p = new Predicate(left, COMPARATIVE_OPERATORS[index].equals("<>") ? "!=" : COMPARATIVE_OPERATORS[index], right);
 				// activate flag
 				foundOP = true;
 			}

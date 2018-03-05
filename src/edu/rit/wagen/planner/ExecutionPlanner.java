@@ -11,7 +11,7 @@ import java.io.PrintStream;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import antlr.CommonAST;
 import antlr.RecognitionException;
@@ -19,7 +19,10 @@ import antlr.TokenStreamException;
 import edu.rit.wagen.database.impl.DatabaseBO;
 import edu.rit.wagen.dto.RAQuery;
 import edu.rit.wagen.dto.Tuple;
+import edu.rit.wagen.graph.GraphUtils;
+import edu.rit.wagen.graph.dto.Graph;
 import edu.rit.wagen.instantiator.DataInstantiator;
+import edu.rit.wagen.integrator.DatabaseIntegrator;
 import edu.rit.wagen.sqp.iapi.operator.RAOperator;
 import ra.RALexer;
 import ra.RAParser;
@@ -28,32 +31,32 @@ import ra.RAXNode;
 
 public class ExecutionPlanner {
 
-	protected DatabaseBO db = new DatabaseBO();
-	protected static PrintStream out = System.out;
-	protected static PrintStream err = System.err;
-	protected static Random random = new Random();
-	protected int _count;
-	// we need to store the temp schemas to delete them at the end
-	protected List<String> listSchemas;
-	
+	private final DatabaseBO db = new DatabaseBO();
+	private static final PrintStream out = System.out;
+	private static final PrintStream err = System.err;
+	private final AtomicInteger counterSDB = new AtomicInteger(0);
+	// list of symbolic databases
+	private final List<String> colSDBs = new ArrayList<>();
 
 	/** The Constant PTABLE. */
 	private final static String PTABLE = "CREATE TABLE <SCHEMA_NAME>.PTABLE (SYMBOL VARCHAR(100), PREDICATE varchar(200))";
 
 	public void init(List<String> sqlCommands, List<RAQuery> queries) {
-		_count = 0;
 		if (sqlCommands != null && sqlCommands.size() > 0) {
-			// init list of schemas
-			listSchemas = new ArrayList<>();
 			// first, we create the real database
-			// this list must have only the create table statements
+			// this list must have only create table statements
 			// the system will create the schema automatically
 			String schemaName = db.createDB(sqlCommands);
-			// time to parser the queries and create the symbolic databases
+			// parser the queries and create the symbolic databases
 			// the queries are relational algebra expressions, no SQL queries
-			// run in parallel
+			// run them in parallel
 			queries.parallelStream().forEach(ra -> createSymbolicDB(ra, schemaName));
-			//delete all the symbolic databases
+			// finding a good integration plan
+			// mst_sequence is the sequence of SI operations
+			String[] mst_sequence = getIntegrationPlan(colSDBs);
+			// run SI operations according to the sequence
+			DatabaseIntegrator.executingPlan(mst_sequence);
+			// delete all the symbolic databases
 			rollback();
 		} else {
 			err.println("Missing Schema definition");
@@ -90,9 +93,8 @@ public class ExecutionPlanner {
 	private void createSymbolicDB(RAQuery ra, String realSchema) {
 		try {
 			if (ra.getConstraints() != null) {
-				_count++;
 				// creating name for the symbolic database
-				String sbSchema = "sb" + _count;
+				String sbSchema = "sb" + counterSDB.incrementAndGet();
 				// create temp file with the query on it
 				File tmpFile = createFile(ra.getQuery());
 				// invoke RA.parser
@@ -100,17 +102,18 @@ public class ExecutionPlanner {
 				// create new symbolic db
 				db.createSchema(sbSchema);
 				// add schema to the list
-				listSchemas.add(sbSchema);
+				colSDBs.add(sbSchema);
 				// create PTable
 				db.executeCommand(PTABLE.replaceAll("<SCHEMA_NAME>", sbSchema));
 				// get the relational algebra tree and set the constrainst for
 				// every operation
 				RAOperator raNode = rax.getOperator(ra.getConstraints(), sbSchema, realSchema);
 				Tuple t = raNode.getNext();
+				//traverse the tree
 				while (t != null) {
 					t = raNode.getNext();
 				}
-				//TODO MJCG This is a temporal location for this call
+				// TODO MJCG This is a temporal location for this call
 				DataInstantiator instantiator = new DataInstantiator(realSchema, sbSchema);
 				instantiator.generateData();
 			} else {
@@ -118,29 +121,39 @@ public class ExecutionPlanner {
 			}
 		} catch (IOException e) {
 			// delete all the databases
-			listSchemas.add(realSchema);
+			colSDBs.add(realSchema);
 			rollback();
 			e.printStackTrace();
 		} catch (RecognitionException e) {
 			// delete all the databases
-			listSchemas.add(realSchema);
+			colSDBs.add(realSchema);
 			rollback();
 			e.printStackTrace();
 		} catch (TokenStreamException e) {
 			// delete all the databases
-			listSchemas.add(realSchema);
+			colSDBs.add(realSchema);
 			rollback();
 			e.printStackTrace();
 		} catch (Exception e) {
 			// delete all the databases
-			listSchemas.add(realSchema);
+			colSDBs.add(realSchema);
 			rollback();
 			e.printStackTrace();
 		}
 	}
 
+	private String[] getIntegrationPlan(List<String> colSDBs) {
+		String[] sequence = new String[colSDBs.size()];
+		// build a summary graph of MSM (Maximum Satisfiable Matching) size by
+		// running SI on every pair of SDBs
+		Graph<String> graph = GraphUtils.buildSummaryGraph(colSDBs);
+		// suggest a plan P by finding a Maximum Spanning Tree from the graph
+		sequence = GraphUtils.mst(graph);
+		return sequence;
+	}
+
 	private File createFile(String ra) throws IOException {
-		File tmpFile = File.createTempFile("queryFile" + _count, "ra");
+		File tmpFile = File.createTempFile("queryFile" + counterSDB.get(), "ra");
 		tmpFile.deleteOnExit();
 		FileWriter writer = new FileWriter(tmpFile);
 		writer.write(ra);
@@ -169,10 +182,10 @@ public class ExecutionPlanner {
 	}
 
 	/**
-	 * Delete the list of databases 
+	 * Delete the list of databases
 	 */
 	private void rollback() {
-		listSchemas.forEach(schema -> {
+		colSDBs.forEach(schema -> {
 			try {
 				db.dropSchema(schema);
 			} catch (SQLException e) {

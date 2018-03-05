@@ -159,7 +159,9 @@ public class DataInstantiator {
 				// adding insert statement to the list
 				insertStmts.add(rowInsert.toString());
 			}
-			// inserting all the rows into the concrete database
+			System.out.println("Inserting in table:" + tableSchema.getTableName());
+			insertStmts.forEach(System.out::println);
+			// inserting all the concrete data into database
 			db.execCommands(insertStmts);
 		}
 	}
@@ -258,6 +260,7 @@ public class DataInstantiator {
 			}
 			break;
 		case "VARCHAR":
+			//TODO MJCG It should have into account the lenght of the column
 			isUnique = isUnique(table, attribute);
 			// if the value must be unique, use the value generated from the SQP
 			if (isUnique) {
