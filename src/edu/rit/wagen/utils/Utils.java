@@ -138,8 +138,7 @@ public class Utils {
 						.trim();
 				String right = predicate
 						.substring(predicate.toLowerCase().indexOf(COMPARATIVE_OPERATORS[index]), predicate.length())
-						.trim().replaceAll(COMPARATIVE_OPERATORS[index], "");
-				// predicates.add(c.replaceAll("'", "\""));
+						.trim().replaceAll(COMPARATIVE_OPERATORS[index], "").replaceAll("'", "\"");
 				p = new Predicate(left, COMPARATIVE_OPERATORS[index].equals("<>") ? "!=" : COMPARATIVE_OPERATORS[index], right);
 				// activate flag
 				foundOP = true;

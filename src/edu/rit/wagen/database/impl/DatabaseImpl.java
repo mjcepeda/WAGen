@@ -43,6 +43,9 @@ public class DatabaseImpl implements Database {
 	/** The Constant PASSWORD. */
 	private final static String PASSWORD = "mientras";
 
+	/** The Constant PTABLE. */
+	private final static String PTABLE = "CREATE TABLE <SCHEMA_NAME>.PTABLE (ATTRIBUTE VARCHAR(100), SYMBOL VARCHAR(100), PREDICATE varchar(200))";
+
 	static {
 		try {
 			Class.forName(DRIVER).newInstance();
@@ -130,7 +133,7 @@ public class DatabaseImpl implements Database {
 	 * @see edu.rit.wagen.dabatase.iapi.Database#createTable(edu.rit.wagen.dto.
 	 * TableDescription)
 	 */
-	public boolean createTable(TableSchema tableSchema) throws SQLException {
+	public boolean createSymbolicTable(TableSchema tableSchema) throws SQLException {
 		Connection conn = null;
 		PreparedStatement ps = null;
 		boolean created = Boolean.FALSE;
@@ -344,6 +347,42 @@ public class DatabaseImpl implements Database {
 		return data;
 	}
 
+	public List<Tuple> getTuplesForUpdate(TableSchema table, String column) throws Exception {
+		Connection conn = null;
+		Statement statement = null;
+		List<Tuple> data = new ArrayList<Tuple>();
+		try {
+			conn = getConnection();
+			statement = conn.createStatement();
+
+			String sql = "select * from " + table.getSchemaName() + "." + table.getTableName() + " where " + column
+					+ " like '" + column + "%'";
+			ResultSet rs = statement.executeQuery(sql);
+			while (rs.next()) {
+				Map<String, String> m = new HashMap<>();
+				for (String attr : table.getColNames()) {
+					String value = rs.getString(attr);
+					m.put(attr, value);
+				}
+				Tuple tuple = new Tuple();
+				tuple.setValues(m);
+				data.add(tuple);
+			}
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (statement != null) {
+				statement.close();
+			}
+		}
+		return data;
+	}
+
 	public String getPredicateValueCache(String schema, String pattern) throws SQLException {
 		Connection conn = null;
 		PreparedStatement ps = null;
@@ -378,15 +417,15 @@ public class DatabaseImpl implements Database {
 		PreparedStatement ps = null;
 
 		try {
-			// TODO MJCG Why the predicate in the paper has []?
 			conn = getConnection();
 			// creating insert sql statement
 			StringBuffer insert = new StringBuffer("insert into ").append(schemaName)
-					.append(".PTable (symbol, predicate) values ('%1','%2')");
+					.append(".PTable (attribute, symbol, predicate) values ('%3','%1','%2')");
 			ps = conn.prepareStatement(insert.toString());
 			// adding every insert into the batch
 			for (PTable t : constraints) {
-				String s = insert.toString().replaceAll("%1", t.symbol).replaceAll("%2", t.predicate);
+				String s = insert.toString().replaceAll("%1", t.symbol).replaceAll("%2", t.predicate).replaceAll("%3",
+						t.attribute);
 				ps.addBatch(s);
 			}
 			// executing the batch
@@ -469,16 +508,18 @@ public class DatabaseImpl implements Database {
 		List<TableSchema> tableList = new ArrayList<>();
 		try {
 			conn = getConnection();
-			String query = new String("select table_name from information_schema.tables where table_schema = ?");
+			String query = new String("select table_name from information_schema.tables where table_schema = ? and table_name <> 'PTable'");
 			s = conn.prepareStatement(query);
 			s.setString(1, schema);
 			ResultSet rs = s.executeQuery();
 			while (rs.next()) {
 				tableList.add(getOutputSchema(schema, rs.getString(1)));
 			}
-			//TODO MJCG Find a way to order the table statements so I do not have problems with constraints
-			//sort the list so there is no problems with the foreign keys
-			tableList.sort(Comparator.comparing(t -> t.getConstraints(ConstraintType.FK), Comparator.comparing(List::size)));
+			// TODO MJCG Find a way to order the table statements so I do not
+			// have problems with constraints
+			// sort the list so there is no problems with the foreign keys
+			tableList.sort(
+					Comparator.comparing(t -> t.getConstraints(ConstraintType.FK), Comparator.comparing(List::size)));
 		} catch (SQLException e) {
 			e.printStackTrace();
 			throw e;
@@ -491,6 +532,33 @@ public class DatabaseImpl implements Database {
 			}
 		}
 		return tableList;
+	}
+
+	public boolean existTable(TableSchema table) throws Exception {
+		Connection conn = null;
+		PreparedStatement s = null;
+		boolean exists = Boolean.FALSE;
+		try {
+			conn = getConnection();
+			String query = new String(
+					"select table_name from information_schema.tables where table_schema = ? and table_name = ?");
+			s = conn.prepareStatement(query);
+			s.setString(1, table.getSchemaName());
+			s.setString(2, table.getTableName());
+			ResultSet rs = s.executeQuery();
+			exists = rs.next();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (s != null) {
+				s.close();
+			}
+		}
+		return exists;
 	}
 
 	public List<Predicate> getPredicates(String schema, String symbol) throws Exception {
@@ -522,6 +590,101 @@ public class DatabaseImpl implements Database {
 			}
 		}
 		return predicateList;
+	}
+
+	public List<String> getAttributesPredicates(List<String> atts, String schema) throws Exception {
+		Connection conn = null;
+		PreparedStatement s = null;
+		List<String> attsList = null;
+		try {
+			conn = getConnection();
+			String query = new String("select distinct attribute from " + schema + ".ptable where attribute = ?");
+			s = conn.prepareStatement(query);
+			for (String a: atts) {
+				s.setString(1, a);
+				ResultSet rs = s.executeQuery();
+				while (rs.next()) {
+					if (attsList == null) {
+						attsList = new ArrayList<>();
+					}
+					attsList.add(rs.getString(1));
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (s != null) {
+				s.close();
+			}
+		}
+		return attsList;
+	}
+
+	public List<Predicate> getPredicates(String schema) throws Exception {
+		Connection conn = null;
+		PreparedStatement s = null;
+		List<Predicate> predicateList = null;
+		try {
+			conn = getConnection();
+			String query = new String("select predicate from " + schema + ".ptable");
+			s = conn.prepareStatement(query);
+			ResultSet rs = s.executeQuery();
+			while (rs.next()) {
+				if (predicateList == null) {
+					predicateList = new ArrayList<>();
+				}
+				predicateList.add(Utils.getPredicate(rs.getString(1)));
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (s != null) {
+				s.close();
+			}
+		}
+		return predicateList;
+	}
+
+	public List<String> getSymbols(String schema) throws Exception {
+		Connection conn = null;
+		PreparedStatement s = null;
+		List<String> predicateList = null;
+		try {
+			conn = getConnection();
+			String query = new String("select distinct (symbol) from " + schema + ".ptable");
+			s = conn.prepareStatement(query);
+			ResultSet rs = s.executeQuery();
+			while (rs.next()) {
+				if (predicateList == null) {
+					predicateList = new ArrayList<>();
+				}
+				predicateList.add(rs.getString(1));
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.close();
+			}
+			if (s != null) {
+				s.close();
+			}
+		}
+		return predicateList;
+	}
+	
+	public void createPTable(String schemaName) throws SQLException {
+		execCommand(PTABLE.replaceAll("<SCHEMA_NAME>", schemaName));
 	}
 
 	/**

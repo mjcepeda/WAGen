@@ -1,6 +1,5 @@
 package edu.rit.wagen.dto;
 
-import java.util.List;
 import java.util.Map;
 
 public class Tuple {
@@ -9,8 +8,6 @@ public class Tuple {
 	 * V - column value
 	 */
 	private Map<String, String> values;
-	//TODO MJCG What is this for?
-	private List<Attribute> attributes;
 
 	/**
 	 * @return the values

@@ -22,7 +22,7 @@ public class RASelect extends UnaryOperation {
 
 	private SELECT _node;
 	//TODO MJCG this approach does not work for predicates like age > 20 and age < 40
-	//the negation of that predicate is age <20 or age>40, but we do not contemplate or conditional formulas
+	//the negation of that predicate is age <20 or age>40, but we do not contemplate 'or' conditional formulas
 	//the system generatas age < 20 and age > 40, which it is a contradiction
 	public List<Predicate> predicates;
 
@@ -150,7 +150,7 @@ public class RASelect extends UnaryOperation {
 			if (value== null) {
 				throw new Exception ("Column " + predicate.symbol + " does not found in the database");
 			}
-			PTable p = new PTable(value, value + predicate.op + predicate.condition);
+			PTable p = new PTable(predicate.attribute, value, value + predicate.op + predicate.condition);
 			constraints.add(p);
 		}
 		return constraints;

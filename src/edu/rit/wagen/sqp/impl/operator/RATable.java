@@ -59,7 +59,7 @@ public class RATable extends RAOperator {
 			tableSchema = db.getOutputSchema(_realSchema, _node.getTableName());
 			// setting the name of the symbolic database
 			tableSchema.setSchemaName(_sbSchema);
-			tableCreated = db.createTable(tableSchema);
+			tableCreated = db.createSymbolicTable(tableSchema);
 			if (tableCreated) {
 				// fill the table until it reaches cardinality value (table
 				// size)

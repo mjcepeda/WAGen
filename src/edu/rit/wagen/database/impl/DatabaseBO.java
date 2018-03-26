@@ -9,8 +9,7 @@ public class DatabaseBO {
 
 	private DatabaseImpl db = new DatabaseImpl();
 
-	public String createDB(List<String> commands) {
-		boolean created = Boolean.TRUE;
+	public String createDB(List<String> commands) throws SQLException{
 		// this list only has the create table statements
 		// first thing, create the schema
 		Random random = new Random();
@@ -24,14 +23,18 @@ public class DatabaseBO {
 			// third, execute the create table statements
 			db.execCommands(updatedCommands);
 		} catch (SQLException e) {
-			// TODO MJCG Maybe I can delete the schema in case of error
 			e.printStackTrace();
+			throw(e);
 		}
 		return schemaName;
 	}
 
 	public void createSchema(String schemaName) throws Exception {
 		db.createSchema(schemaName);
+	}
+	
+	public void createPTable (String schemaName) throws Exception {
+		db.createPTable(schemaName);
 	}
 	
 	public void executeCommand (String command) throws Exception{

@@ -38,7 +38,7 @@ public interface Database {
 	 * @throws SQLException
 	 *             the SQL exception
 	 */
-	public boolean createTable(TableSchema table) throws SQLException;
+	public boolean createSymbolicTable(TableSchema table) throws SQLException;
 
 	public TableSchema getOutputSchema(String schema, String table) throws SQLException;
 
@@ -77,4 +77,16 @@ public interface Database {
 	public void insertSymbolicValueCache(String schemaName, String symbol, String value) throws SQLException;
 
 	public String getPredicateValueCache(String schema, String pattern) throws SQLException;
+
+	public List<Tuple> getTuplesForUpdate(TableSchema table, String column) throws Exception;
+
+	public boolean existTable(TableSchema table) throws Exception;
+
+	public List<Predicate> getPredicates(String schema) throws Exception;
+	
+	public List<String> getSymbols(String schema) throws Exception;
+	
+	public List<String> getAttributesPredicates(List<String> atts, String schema) throws Exception;
+	
+	public void createPTable(String schema) throws SQLException;
 }

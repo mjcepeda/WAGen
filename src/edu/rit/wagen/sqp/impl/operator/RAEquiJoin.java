@@ -101,7 +101,7 @@ public class RAEquiJoin extends BinaryOperation {
 					}
 				}
 			}
-			//this list will contain c tuples (c = cardinality)
+			// this list will contain c tuples (c = cardinality)
 			listInputS = mapResultS.values().stream().flatMap(l -> l.stream()).collect(Collectors.toList());
 		} else {
 			// TODO MJCG Sometimes this distribution generator may leave some
@@ -273,7 +273,11 @@ public class RAEquiJoin extends BinaryOperation {
 			if (_cardinality != opS._cardinality) {
 				// check if the input S is pre-grouped on the join attribute k
 				if (opS instanceof RAEquiJoin) {
-					_isPreGrouped = ((RAEquiJoin) opS).tableS.getColNames().contains(k);
+					// _isPreGrouped = opS._isPreGrouped;
+					// if (!_isPreGrouped) {
+					_isPreGrouped = ((RAEquiJoin) opS).tableS.getColNames().contains(k)
+							&& opS._cardinality != ((RAEquiJoin) opS).opS._cardinality;
+					// }
 				} else {
 					_isPreGrouped = Boolean.FALSE;
 					_preGroupedList = null;
@@ -368,46 +372,54 @@ public class RAEquiJoin extends BinaryOperation {
 	}
 
 	private void negativeJoinCase1() throws Exception {
-		// get the remaining results from the left source
+		// get the remaining results from R
 		// and collect them
 		Tuple rt = opR.getNext();
-		List<Tuple> colLeft = new ArrayList<>();
+		List<Tuple> colR = new ArrayList<>();
 		while (rt != null) {
-			colLeft.add(rt);
+			colR.add(rt);
 			rt = opR.getNext();
 		}
-		// TODO MJCG Que pasa si existen tuples de la tabla S que no son
-		// devueltas por el getNext(), eso da error porque la fk no se actualiza
-		Tuple t = opS.getNext();
-		if (t != null) {
-			// extract from the results list the list of js already used
-			List<String> jUsedList = new ArrayList<>();
-			_results.forEach(tuple -> jUsedList.add(tuple.getValues().get(j)));
-			// do the same thing with the list of remaining results from the
-			// left source
-			colLeft.forEach(tuple -> jUsedList.add(tuple.getValues().get(j)));
-			// get all ids from database
-			// TODO MJCG Not very efficient, time to change it?
-			List<Tuple> tableScan = db.getData(tableR);
-			List<String> jRemainingList = new ArrayList<>();
-			tableScan.forEach(tuple -> jRemainingList.add(tuple.getValues().get(j)));
-			jRemainingList.removeAll(jUsedList);
-			if (jRemainingList.size() > 0) {
-				UniformIntegerDistribution distribution = new UniformIntegerDistribution(0, jRemainingList.size() - 1);
-				// get form the database the remaining js
-				// fetch the remaining tuples from S
-				while (t != null) {
-					// for each tuple, look a symbol j- from the set minus
-					// between the base table where the join attribute j
-					// originates from and
-					// left source (R)
-					int index = distribution.sample();
-					// update the right source base table (S)
-					updateBaseTable(jRemainingList.get(index), t.getValues().get(k));
-					t = opS.getNext();
-				}
-			}
+		// get the list of unused ids from base table R
+		List<String> jRemainingList = getRemainingIdsFromR(colR);
+		// join the remaining tuple from S with unused ids from R
+		Tuple t = null;
+		if ((t = opS.getNext()) != null) {
+			negativeJoinUpdate(jRemainingList, t);
 		}
+		// update any tuple from S that remains no updated
+		List<Tuple> listS = db.getTuplesForUpdate(tableS, k);
+		for (Tuple tuple : listS) {
+			negativeJoinUpdate(jRemainingList, tuple);
+		}
+	}
+
+	private void negativeJoinUpdate(List<String> jRemainingIds, Tuple t) throws Exception {
+		if (jRemainingIds.size() > 0) {
+			UniformIntegerDistribution distribution = new UniformIntegerDistribution(0, jRemainingIds.size() - 1);
+			int index = distribution.sample();
+			// update table (S)
+			updateBaseTable(jRemainingIds.get(index), t.getValues().get(k));
+		} else {
+			// TODO Change this please
+			throw new Exception("There is no ids from " + tableR.getTableName() + " to perform the negative join");
+		}
+	}
+
+	private List<String> getRemainingIdsFromR(List<Tuple> inputR) throws SQLException {
+		// extract from the results list the list of js already used
+		List<String> jUsedList = new ArrayList<>();
+		_results.forEach(tuple -> jUsedList.add(tuple.getValues().get(j)));
+		// do the same thing with the list of remaining results from the
+		// left source
+		inputR.forEach(tuple -> jUsedList.add(tuple.getValues().get(j)));
+		// get all ids from database
+		// TODO MJCG Not very efficient, time to change it?
+		List<Tuple> tableScan = db.getData(tableR);
+		List<String> jRemainingList = new ArrayList<>();
+		tableScan.forEach(tuple -> jRemainingList.add(tuple.getValues().get(j)));
+		jRemainingList.removeAll(jUsedList);
+		return jRemainingList;
 	}
 
 	private void updateBaseTable(String newValue, String oldValue) throws Exception {
@@ -415,26 +427,5 @@ public class RAEquiJoin extends BinaryOperation {
 		db.execCommand(sb.append(_sbSchema).append(".").append(tableS.getTableName()).append(" set ").append(k)
 				.append("='").append(newValue).append("' where ").append(k).append("='").append(oldValue).append("'")
 				.toString());
-	}
-
-	private int[] getUniformDist(int count, int sum) {
-		java.util.Random g = new java.util.Random();
-
-		int vals[] = new int[count];
-		sum -= count;
-
-		for (int i = 0; i < count - 1; ++i) {
-			vals[i] = g.nextInt(sum);
-		}
-		vals[count - 1] = sum;
-
-		java.util.Arrays.sort(vals);
-		for (int i = count - 1; i > 0; --i) {
-			vals[i] -= vals[i - 1];
-		}
-		for (int i = 0; i < count; ++i) {
-			++vals[i];
-		}
-		return vals;
 	}
 }

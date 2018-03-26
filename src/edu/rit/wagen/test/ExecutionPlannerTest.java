@@ -21,9 +21,12 @@ public class ExecutionPlannerTest {
 	public static final String q3 = "\\select_{name='Amy'}(\\select_{name='Amy'} customer \\join_{c_id = o_cid} orders);\n";
 	// unsupported query
 	public static final String FAIL_QUERY2 = "\\select_{age > 20 and age < 40} customer;\n";
+	public static final String QUERY2 = "\\select_{name='Amy'} customer \\join_{c_id = o_cid} orders;\n";
 
 	public static final String QUERY1 = "\\select_{age > 20} customer;\n";
-	public static final String QUERY2 = "\\select_{name='Amy'} customer \\join_{c_id = o_cid} orders;\n";
+	
+	public static final String QUERY1_2 = "\\select_{age < 30} customer;\n";
+	
 	// select count(*) from customer, orders where c_id = o_cid
 	public static final String QUERY3 = "customer \\join_{c_id = o_cid} orders;\n";
 	public static final String QUERY3_2 = "orders \\join_{o_cid = c_id} customer;\n";
@@ -37,8 +40,7 @@ public class ExecutionPlannerTest {
 			+ "\\select_{r_code=1} region \\join_{r_regionkey = n_regionkey} nation \\join_{n_nationkey = s_nationkey} supplier);\n";
 	// select count(*) from WAGEN523.region, WAGEN523.nation, WAGEN523.supplier,
 	// WAGEN523.partsupp, WAGEN523.part
-	// where r_regionkey=n_regionkey and n_nationkey = s_nationkey and
-	// n_nationkey = S_NATIONKEY
+	// where r_regionkey=n_regionkey and n_nationkey = s_nationkey
 	// and S_SUPPKEY = PS_SUPPKEY AND PS_PARTKEY = P_PARTKEY
 	public static final String QUERY6 = "\\project_{s_acctbal, s_name, n_name, s_address, s_phone, s_comment} ("
 			+ "(((\\select_{r_code=1} region \\join_{r_regionkey = n_regionkey} nation) "
@@ -194,8 +196,8 @@ public class ExecutionPlannerTest {
 		// planner.printQuery(QUERY5);
 	}
 
-	@Test
-	public void test6_TPCH_Q2_3joins() {
+//	@Test
+	public void test6_TPCH_Q2_4joins() {
 		List<String> schema = Arrays.asList(TABLE_REGION, TABLE_NATION, TABLE_SUPPLIER, TABLE_PART, TABLE_PARTSUPP);
 		Map<Integer, RAAnnotation> constraints = new HashMap<>();
 		// region cardinality (size=5)
@@ -214,7 +216,7 @@ public class ExecutionPlannerTest {
 		constraints.put(10, new RAAnnotation(17, DistributionType.NA));
 		// join cardinality 7 (r_regionkey = n_regionkey)
 		constraints.put(4, new RAAnnotation(7, DistributionType.UNIFORM));
-		// join cardinality 22 (s_suppkey = ps_suppkey)
+		// join cardinality 20 (s_suppkey = ps_suppkey)
 		constraints.put(8, new RAAnnotation(20, DistributionType.UNIFORM));
 		// the cardinality of the final sql must be 20
 		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY6, constraints));
@@ -223,33 +225,55 @@ public class ExecutionPlannerTest {
 		// planner.printQuery(QUERY6);
 	}
 
-	@Test
+//	@Test
 	public void test7_TPCH_4joins_DP() {
 		List<String> schema = Arrays.asList(TABLE_REGION, TABLE_NATION, TABLE_SUPPLIER, TABLE_PART, TABLE_PARTSUPP);
 		Map<Integer, RAAnnotation> constraints = new HashMap<>();
-		// part cardinality (size=8)
-		constraints.put(1, new RAAnnotation(8, DistributionType.NA));
-		// partsupplier cardinality (size=30)
-		constraints.put(2, new RAAnnotation(30, DistributionType.NA));
-		// supplier cardinality (size=17)
-		constraints.put(4, new RAAnnotation(17, DistributionType.NA));
-		// nation cardinality (size=10)
-		constraints.put(6, new RAAnnotation(10, DistributionType.NA));
+		// part cardinality (size=40)
+		constraints.put(1, new RAAnnotation(40, DistributionType.NA));
+		// partsupplier cardinality (size=50)
+		constraints.put(2, new RAAnnotation(50, DistributionType.NA));
+		// supplier cardinality (size=30)
+		constraints.put(4, new RAAnnotation(30, DistributionType.NA));
+		// nation cardinality (size=15)
+		constraints.put(6, new RAAnnotation(15, DistributionType.NA));
 		// region cardinality (size=5)
 		constraints.put(8, new RAAnnotation(5, DistributionType.NA));
 		// // select cardinality 3 (r_code=1)
 		// constraints.put(2, new RAAnnotation(3, DistributionType.NA));
 		// // select cardinality 17 (p_size=50 and p_type=36)
 		// constraints.put(10, new RAAnnotation(17, DistributionType.NA));
-		// // join cardinality 7 (r_regionkey = n_regionkey)
-		// constraints.put(4, new RAAnnotation(7, DistributionType.UNIFORM));
-		// // join cardinality 22 (s_suppkey = ps_suppkey)
-		// constraints.put(8, new RAAnnotation(20, DistributionType.UNIFORM));
+		// join cardinality 7 (r_regionkey = n_regionkey)
+		constraints.put(9, new RAAnnotation(7, DistributionType.UNIFORM));
+		// join cardinality 20 (s_suppkey = ps_suppkey)
+		constraints.put(5, new RAAnnotation(20, DistributionType.UNIFORM));
 		// the cardinality of the final sql must be 20
 		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY8, constraints));
 		ExecutionPlanner planner = new ExecutionPlanner();
+		 planner.init(schema, queries);
+//		planner.printQuery(QUERY8);
+	}
+	
+	@Test
+	public void test2Queries() {
+		List<String> schema = Arrays.asList(
+				"CREATE TABLE CUSTOMER (c_id int NOT NULL PRIMARY KEY, c_acctbal varchar(50), name varchar(80) unique, age int)",
+				"create table Orders (o_id int not null primary key, o_date date, o_cid int, FOREIGN KEY (o_cid) REFERENCES customer(c_id))");
+		Map<Integer, RAAnnotation> constraintsQuery1 = new HashMap<>();
+		//customer cardinality 4
+		constraintsQuery1.put(1, new RAAnnotation(4, DistributionType.NA));
+		//select cardinality 2
+		constraintsQuery1.put(2, new RAAnnotation(2, DistributionType.NA));
+		Map<Integer, RAAnnotation> constraintsQuery2 = new HashMap<>();
+		//customer cardinality 4
+		constraintsQuery2.put(1, new RAAnnotation(4, DistributionType.NA));
+		//select cardinality 2
+		constraintsQuery2.put(2, new RAAnnotation(2, DistributionType.NA));
+		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY1, constraintsQuery1), new RAQuery(QUERY1_2, constraintsQuery1));
+		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.printQuery(QUERY1);
+//		planner.printQuery(QUERY3);
 		planner.init(schema, queries);
-		// planner.printQuery(QUERY8);
 	}
 
 	// @Test

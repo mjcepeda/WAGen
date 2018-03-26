@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -19,10 +20,9 @@ import antlr.TokenStreamException;
 import edu.rit.wagen.database.impl.DatabaseBO;
 import edu.rit.wagen.dto.RAQuery;
 import edu.rit.wagen.dto.Tuple;
-import edu.rit.wagen.graph.GraphUtils;
-import edu.rit.wagen.graph.dto.Graph;
 import edu.rit.wagen.instantiator.DataInstantiator;
 import edu.rit.wagen.integrator.DatabaseIntegrator;
+import edu.rit.wagen.integrator.NodeSI;
 import edu.rit.wagen.sqp.iapi.operator.RAOperator;
 import ra.RALexer;
 import ra.RAParser;
@@ -32,32 +32,58 @@ import ra.RAXNode;
 public class ExecutionPlanner {
 
 	private final DatabaseBO db = new DatabaseBO();
+	private final DatabaseIntegrator integrator = new DatabaseIntegrator();
 	private static final PrintStream out = System.out;
 	private static final PrintStream err = System.err;
 	private final AtomicInteger counterSDB = new AtomicInteger(0);
 	// list of symbolic databases
-	private final List<String> colSDBs = new ArrayList<>();
+	private List<String> colSDBs = new ArrayList<>();
 
-	/** The Constant PTABLE. */
-	private final static String PTABLE = "CREATE TABLE <SCHEMA_NAME>.PTABLE (SYMBOL VARCHAR(100), PREDICATE varchar(200))";
-
-	public void init(List<String> sqlCommands, List<RAQuery> queries) {
-		if (sqlCommands != null && sqlCommands.size() > 0) {
+	public void init(List<String> schema, List<RAQuery> queries) {
+		if (schema != null && schema.size() > 0) {
 			// first, we create the real database
 			// this list must have only create table statements
 			// the system will create the schema automatically
-			String schemaName = db.createDB(sqlCommands);
-			// parser the queries and create the symbolic databases
-			// the queries are relational algebra expressions, no SQL queries
-			// run them in parallel
-			queries.parallelStream().forEach(ra -> createSymbolicDB(ra, schemaName));
-			// finding a good integration plan
-			// mst_sequence is the sequence of SI operations
-			String[] mst_sequence = getIntegrationPlan(colSDBs);
-			// run SI operations according to the sequence
-			DatabaseIntegrator.executingPlan(mst_sequence);
-			// delete all the symbolic databases
-			rollback();
+			try {
+				String schemaName = db.createDB(schema);
+				// parser the queries and create the symbolic databases
+				// the queries are relational algebra expressions, no SQL
+				// queries
+				// run them in parallel
+				// TODO FIX the parallelization
+				// queries.parallelStream().forEach(ra -> {
+				// createSymbolicDB(ra, schemaName);
+				// });
+				queries.forEach(ra -> {
+					createSymbolicDB(ra, schemaName);
+				});
+				List<String> integratedSDB = new ArrayList<>();
+				if (colSDBs.size() > 1) {
+					// call the integrator here that returns the tree plan
+					// SDB
+					NodeSI plan = getIntegrationPlan(colSDBs);
+					integratedSDB = integrator.executingPlan(plan);
+				} else {
+					integratedSDB.addAll(colSDBs);
+				}
+				// iterate for the list of final databases, create a concrete DB
+				// for each and generate the data
+				for (String sbSchema : integratedSDB) {
+					// creating a concreate database per integrated symbolic
+					// database
+					String finalSchema = schemaName;
+					if (integratedSDB.size() > 1) {
+						finalSchema = db.createDB(schema);
+					}
+					DataInstantiator instantiator = new DataInstantiator(finalSchema, sbSchema);
+					instantiator.generateData();
+				}
+				// delete all the symbolic databases
+				// TODO Uncomment this once everything is implemeted
+				// rollback();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		} else {
 			err.println("Missing Schema definition");
 		}
@@ -87,7 +113,6 @@ public class ExecutionPlanner {
 			err.println("Error parsing query");
 			e.printStackTrace();
 		}
-
 	}
 
 	private void createSymbolicDB(RAQuery ra, String realSchema) {
@@ -104,18 +129,16 @@ public class ExecutionPlanner {
 				// add schema to the list
 				colSDBs.add(sbSchema);
 				// create PTable
-				db.executeCommand(PTABLE.replaceAll("<SCHEMA_NAME>", sbSchema));
+				db.createPTable(sbSchema);
 				// get the relational algebra tree and set the constrainst for
 				// every operation
 				RAOperator raNode = rax.getOperator(ra.getConstraints(), sbSchema, realSchema);
 				Tuple t = raNode.getNext();
-				//traverse the tree
+				// traverse the tree
 				while (t != null) {
 					t = raNode.getNext();
 				}
-				// TODO MJCG This is a temporal location for this call
-				DataInstantiator instantiator = new DataInstantiator(realSchema, sbSchema);
-				instantiator.generateData();
+
 			} else {
 				err.println("Size of the tables not specified");
 			}
@@ -123,33 +146,42 @@ public class ExecutionPlanner {
 			// delete all the databases
 			colSDBs.add(realSchema);
 			rollback();
+			colSDBs = null;
 			e.printStackTrace();
 		} catch (RecognitionException e) {
 			// delete all the databases
 			colSDBs.add(realSchema);
 			rollback();
+			colSDBs = null;
 			e.printStackTrace();
 		} catch (TokenStreamException e) {
 			// delete all the databases
 			colSDBs.add(realSchema);
 			rollback();
+			colSDBs = null;
 			e.printStackTrace();
 		} catch (Exception e) {
 			// delete all the databases
 			colSDBs.add(realSchema);
 			rollback();
+			colSDBs = null;
 			e.printStackTrace();
 		}
 	}
 
-	private String[] getIntegrationPlan(List<String> colSDBs) {
-		String[] sequence = new String[colSDBs.size()];
-		// build a summary graph of MSM (Maximum Satisfiable Matching) size by
-		// running SI on every pair of SDBs
-		Graph<String> graph = GraphUtils.buildSummaryGraph(colSDBs);
-		// suggest a plan P by finding a Maximum Spanning Tree from the graph
-		sequence = GraphUtils.mst(graph);
-		return sequence;
+	private NodeSI getIntegrationPlan(List<String> colSDBs) {
+		Collections.reverse(colSDBs);
+		return buildTree(colSDBs);
+	}
+
+	private NodeSI buildTree(List<String> colsSDBs) {
+		NodeSI node = null;
+		if (colsSDBs.size() == 2) {
+			node = new NodeSI(colsSDBs.get(1), colsSDBs.get(0));
+		} else {
+			node = new NodeSI(buildTree(colsSDBs.subList(1, colsSDBs.size())), colsSDBs.get(0));
+		}
+		return node;
 	}
 
 	private File createFile(String ra) throws IOException {
