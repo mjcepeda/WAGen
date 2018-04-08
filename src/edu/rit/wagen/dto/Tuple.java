@@ -1,7 +1,11 @@
 package edu.rit.wagen.dto;
 
 import java.util.Map;
-
+/**
+ * The Class Tuple.
+ * @author Maria Cepeda
+ *
+ */
 public class Tuple {
 	/**
 	 * K - column name
