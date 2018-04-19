@@ -6,4 +6,4 @@ with a set of constraints C_i (e.g value distribution, cardinality constraint). 
 DB_2,..., DB_m such that; 1) all databases DB_i (1 <= i <= m) conform D, and 2) the resulting cardinalities C'_i of posing Q_i
 over one of the databases DB_j approximate satisfy C_i.
 
-This project is based on MyBencharkm (E. Lo, C. Binnig, D. Kossmann, M. T. O¨ zsu, and W. Hon. A framework for testing DBMS features. VLDB J., 19(2):203–230, 2010).
+This project is based on MyBenchmark (E. Lo, N. Cheng, and W. Hon. Generating Databases for Query Workloads. PVLDB, 2010).
