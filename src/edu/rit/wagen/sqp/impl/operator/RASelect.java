@@ -13,19 +13,36 @@ import edu.rit.wagen.utils.Utils;
 import ra.RAXNode.SELECT;
 
 /**
- * Selection operator
- * 
+ * The Class RASelect.
  * @author Maria Cepeda
- *
  */
 public class RASelect extends UnaryOperation {
 
+	/** The node. */
 	private SELECT _node;
-	//TODO MJCG this approach does not work for predicates like age > 20 and age < 40
-	//the negation of that predicate is age <20 or age>40, but we do not contemplate 'or' conditional formulas
-	//the system generatas age < 20 and age > 40, which it is a contradiction
+	// this approach does not work for predicates like age > 20 and age < 40
+	// the negation of that predicate is age <20 or age>40, but we do not
+	// contemplate 'or' conditional formulas
+	/** The predicates. */
+	// the system generatas age < 20 and age > 40, which it is a contradiction
 	public List<Predicate> predicates;
+	
+	//this list will contain all the insert stmts to the PTable
+	//this operator performs just one insert to the Ptable at the end
+	/** The stmts. */
+	//that improves performance
+	public List<PTable> stmts;
 
+	/**
+	 * Instantiates a new RA select.
+	 *
+	 * @param source the source
+	 * @param node the node
+	 * @param constraints the constraints
+	 * @param sbSchema the sb schema
+	 * @param realSchema the real schema
+	 * @throws Exception the exception
+	 */
 	public RASelect(RAOperator source, SELECT node, RAAnnotation constraints, String sbSchema, String realSchema)
 			throws Exception {
 		super(source, sbSchema, realSchema);
@@ -45,16 +62,24 @@ public class RASelect extends UnaryOperation {
 		_isPreGrouped = Boolean.FALSE;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.sqp.iapi.operator.RAOperator#open()
+	 */
 	@Override
 	public void open() throws Exception {
 		// parsing predicate
 		predicates = Utils.parsePredicate(_node.getCondition().toUpperCase());
+		//init the list of inserts to the PTable
+		stmts = new ArrayList<>();
+		
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.sqp.iapi.operator.RAOperator#getNext()
+	 */
 	@Override
 	public Tuple getNext() throws Exception {
 		Tuple tuple = null;
-		List<PTable> constraints = null;
 		// check if the source (input) is pre-grouped on the selection
 		// attribute(s), do it just the first time this method is invoked
 		// get the set of attributes that participate in the predicate
@@ -82,31 +107,39 @@ public class RASelect extends UnaryOperation {
 		tuple = this.source.getNext();
 		if (tuple != null) {
 			if (_cardinality > _counter) {
+//				System.out.println(new Date() + " select getNext() cardinality " + predicates);
 				// process the tuple with positive tuple annotation
-				insertPredicates(false, constraints, tuple);
+				List<PTable> constraints = insertPredicates(false, tuple);
+				//add the constraints to the list of PTable inserts
+				stmts.addAll(constraints);
 				// increment the cardinality counter
 				_counter++;
 				// add the tuple to the result list
 				this._results.add(tuple);
+//				System.out.println(new Date() + " select getNext() cardinality finished");
 			} else {
+//				System.out.println(new Date() + " select getNext() cardinality reached " + predicates);
 				// process with negative tuple annotation
 				// the remaining tuples from its child
 				while (tuple != null) {
-					insertPredicates(true, constraints, tuple);
+					List<PTable> c = insertPredicates(true, tuple);
+					stmts.addAll(c);
 					tuple = source.getNext();
 				}
+				//insert predicates of the remaining tuples
+				db.insertConstraints(_sbSchema, stmts);
 				// return null to its parent
 				tuple = null;
+				close();
+//				System.out.println(new Date() + " select getNext() cardinality reached finished");
 			}
 		}
-		// } else {
-		// throw new Exception(
-		// "No supported pre-grouped attributes in selection operation. Do not
-		// put selection operation on top of joins");
-		// }
 		return tuple;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.sqp.iapi.operator.RAOperator#close()
+	 */
 	@Override
 	public void close() {
 		source.close();
@@ -114,24 +147,35 @@ public class RASelect extends UnaryOperation {
 		_isPreGrouped = null;
 		_counter = 0;
 		_results = null;
+		stmts = null;
 	}
 
-	private void insertPredicates(boolean negate, List<PTable> constraints, Tuple tuple) throws Exception {
+	/**
+	 * Insert predicates.
+	 *
+	 * @param negate the negate
+	 * @param tuple the tuple
+	 * @return the list
+	 * @throws Exception the exception
+	 */
+	private List<PTable> insertPredicates(boolean negate, Tuple tuple) throws Exception {
 		// for each symbol s in t that participates in the
 		// selection predicate
 		// p, insert a corresponding tuple <s, p> to the
 		// PTable
-		constraints = getPredicateBySymbol(tuple);
+		List<PTable> constraints = getPredicateBySymbol(tuple);
 		if (negate) {
 			// negate the constraints
 			negate(constraints);
 		}
-		// insert all constraints in PTable
-		if (constraints != null && constraints.size() > 0) {
-			db.insertConstraints(_sbSchema, constraints);
-		}
+		return constraints;
 	}
 
+	/**
+	 * Negate.
+	 *
+	 * @param predicates the predicates
+	 */
 	private void negate(List<PTable> predicates) {
 		predicates.forEach(ptable -> {
 			try {
@@ -142,17 +186,25 @@ public class RASelect extends UnaryOperation {
 		});
 	}
 
-	private List<PTable> getPredicateBySymbol(Tuple tuple) throws Exception{
+	/**
+	 * Gets the predicate by symbol.
+	 *
+	 * @param tuple the tuple
+	 * @return the predicate by symbol
+	 * @throws Exception the exception
+	 */
+	private List<PTable> getPredicateBySymbol(Tuple tuple) throws Exception {
 		List<PTable> constraints = new ArrayList<>();
 		// iterate over all contraints and create a PTable object
 		for (Predicate predicate : predicates) {
 			String value = tuple.getValues().get(predicate.symbol);
-			if (value== null) {
-				throw new Exception ("Column " + predicate.symbol + " does not found in the database");
+			if (value == null) {
+				throw new Exception("Column " + predicate.symbol + " does not found in the database");
 			}
 			PTable p = new PTable(predicate.attribute, value, value + predicate.op + predicate.condition);
 			constraints.add(p);
 		}
 		return constraints;
 	}
+
 }

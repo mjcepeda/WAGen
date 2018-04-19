@@ -7,8 +7,13 @@ import java.util.Random;
 
 import edu.rit.wagen.dto.Predicate;
 
+/**
+ * The Class Utils.
+ * @author Maria Cepeda
+ */
 public class Utils {
 
+	/** The Constant AND. */
 	public static final String AND = "AND";
 
 	/** The Constant EQUALS. */
@@ -32,25 +37,52 @@ public class Utils {
 	/** The Constant LIKE. */
 	public static final String LIKE = "like";
 
-	/** The Constant NOT LIKE. */
+	/** The Constant NOT_LIKE. */
 	public static final String NOT_LIKE = "not like";
 
+	/** The Constant SUM. */
 	public static final String SUM = "+";
+	
+	/** The Constant MINUS. */
 	public static final String MINUS = "-";
+	
+	/** The Constant TIMES. */
 	public static final String TIMES = "*";
+	
+	/** The Constant DIVIDE. */
 	public static final String DIVIDE = "/";
 
+	/** The Constant COMPARATIVE_OPERATORS. */
 	public static final String[] COMPARATIVE_OPERATORS = { DISTINCT, NOT_LIKE, LIKE, GREQ, LEQ, EQUALS, GRE, LESS};
 
+	/** The Constant ARITHMETIC_OPERATORS. */
 	public static final String[] ARITHMETIC_OPERATORS = { SUM, MINUS, TIMES, DIVIDE };
 	
+	/** The Constant SYMBOL_REGEX. */
 	public static final String SYMBOL_REGEX = ".[a-zA-Z]+\\d";
 
+	/**
+	 * The Enum ConstraintType.
+	 */
 	public enum ConstraintType {
+		
+		/** The pk. */
 		// pk, fk, unique and not null are enforced by default
-		PK, FK, UNIQUE, /* NOT_NULL, */ CHECK
+		PK, 
+ /** The fk. */
+ FK, 
+ /** The unique. */
+ UNIQUE, 
+ /** The check. */
+ /* NOT_NULL, */ CHECK
 	}
 
+	/**
+	 * Gets the constraint.
+	 *
+	 * @param type the type
+	 * @return the constraint
+	 */
 	public static ConstraintType getConstraint(String type) {
 		ConstraintType cType = null;
 		switch (type.trim().toUpperCase()) {
@@ -69,6 +101,13 @@ public class Utils {
 		return cType;
 	}
 
+	/**
+	 * Gets the correlated symbols.
+	 *
+	 * @param p the p
+	 * @return the correlated symbols
+	 * @throws Exception the exception
+	 */
 	public static List<String> getCorrelatedSymbols(Predicate p) throws Exception {
 		List<String> l = new ArrayList<>();
 		boolean foundOP = false;
@@ -108,6 +147,13 @@ public class Utils {
 		return l;
 	}
 
+	/**
+	 * Parses the predicate.
+	 *
+	 * @param predicate the predicate
+	 * @return the list
+	 * @throws Exception the exception
+	 */
 	public static List<Predicate> parsePredicate(String predicate) throws Exception {
 		List<Predicate> colPredicates = null;
 		// all the predicates are in CNF (conjunctive normal form)
@@ -125,6 +171,13 @@ public class Utils {
 		return colPredicates;
 	}
 
+	/**
+	 * Gets the predicate.
+	 *
+	 * @param predicate the predicate
+	 * @return the predicate
+	 * @throws Exception the exception
+	 */
 	public static Predicate getPredicate(String predicate) throws Exception {
 		boolean foundOP = false;
 		int index = 0;
@@ -151,6 +204,13 @@ public class Utils {
 		return p;
 	}
 	
+	/**
+	 * Parses the condition.
+	 *
+	 * @param condition the condition
+	 * @return the predicate
+	 * @throws Exception the exception
+	 */
 	public static Predicate parseCondition(String condition) throws Exception {
 		boolean foundOP = false;
 		int index = 0;
@@ -178,30 +238,61 @@ public class Utils {
 		return p;
 	}
 
+	/**
+	 * Negate predicate.
+	 *
+	 * @param predicate the predicate
+	 * @return the string
+	 * @throws Exception the exception
+	 */
 	public static String negatePredicate(String predicate) throws Exception {
 		String negation = null;
 		boolean found = Boolean.FALSE;
-		for (String op : COMPARATIVE_OPERATORS) {
+		int idx = 0;
+		while (idx < COMPARATIVE_OPERATORS.length && !found) {
+			String op = COMPARATIVE_OPERATORS[idx];
 			if (predicate.contains(op)) {
 				negation = negate(predicate, op);
 				found = Boolean.TRUE;
 			}
+			idx++;
 		}
+		
 		if (!found) {
 			throw new Exception("The operation in this predicate is not suuported");
 		}
 		return negation;
 	}
 
+	/**
+	 * Generate random string.
+	 *
+	 * @param random the random
+	 * @param length the length
+	 * @return the string
+	 */
 	public static String generateRandomString(Random random, int length) {
 		return random.ints(48, 123).filter(i -> (i < 58) || (i > 64 && i < 91) || (i > 96)).limit(length)
 				.collect(StringBuilder::new, (sb, i) -> sb.append((char) i), StringBuilder::append).toString();
 
 	}
 
+	/**
+	 * Negate.
+	 *
+	 * @param predicate the predicate
+	 * @param op the op
+	 * @return the string
+	 */
 	private static String negate(String predicate, String op) {
 		String neg = null;
 		switch (op) {
+		case GREQ:
+			neg = LESS;
+			break;
+		case LEQ:
+			neg = GRE;
+			break;
 		case EQUALS:
 			neg = DISTINCT;
 			break;
@@ -211,20 +302,14 @@ public class Utils {
 		case GRE:
 			neg = LEQ;
 			break;
-		case GREQ:
-			neg = LESS;
-			break;
 		case LESS:
 			neg = GREQ;
 			break;
-		case LEQ:
-			neg = GRE;
+		case NOT_LIKE:
+			neg = LIKE;
 			break;
 		case LIKE:
 			neg = NOT_LIKE;
-			break;
-		case NOT_LIKE:
-			neg = LIKE;
 			break;
 		}
 		return predicate.replace(op, neg);

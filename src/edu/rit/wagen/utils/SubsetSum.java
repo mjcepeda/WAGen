@@ -7,8 +7,22 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * The Class SubsetSum.
+ * 
+ * @author Maria Cepeda
+ */
 public class SubsetSum {
 
+	/**
+	 * App overweight subset sum.
+	 *
+	 * @param listKs the list ks
+	 * @param target the target
+	 * @param ratio the ratio
+	 * @return the list
+	 * @throws RuntimeException the runtime exception
+	 */
 	public static List<Long> appOverweightSubsetSum(List<Long> listKs, int target, double ratio)
 			throws RuntimeException {
 		List<Long> subset = new ArrayList<>();

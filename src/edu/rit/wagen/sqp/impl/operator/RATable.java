@@ -33,6 +33,12 @@ public class RATable extends RAOperator {
 	 */
 	private int indexResult;
 
+	private int page;
+
+	private int totalPages;
+
+	private static final int LIMIT = 1000;
+
 	private TABLE _node;
 
 	public RATable(TABLE node, int cardinality, String sbSchema, String realSchema) {
@@ -42,10 +48,12 @@ public class RATable extends RAOperator {
 		this.tableSchema = null;
 		this.tableCreated = Boolean.FALSE;
 		this._results = null;
-		this.indexResult = 0;
+		this.indexResult = 1;
 		// this operation never has data pre-grouped since it is created unique
 		this._preGroupedList = null;
 		this._isPreGrouped = Boolean.FALSE;
+		this.page = 0;
+		this.totalPages = cardinality / LIMIT;
 	}
 
 	/**
@@ -53,22 +61,28 @@ public class RATable extends RAOperator {
 	 */
 	@Override
 	public void open() throws Exception {
+//		System.out.println(new Date() + " open table " + _node.getTableName());
+		// creating table
+		tableSchema = db.getOutputSchema(_realSchema, _node.getTableName());
+		// setting the name of the symbolic database
+		tableSchema.setSchemaName(_sbSchema);
+		tableCreated = db.existTable(tableSchema);
 		// check if table is created
 		if (!tableCreated) {
-			// creating table
-			tableSchema = db.getOutputSchema(_realSchema, _node.getTableName());
-			// setting the name of the symbolic database
-			tableSchema.setSchemaName(_sbSchema);
+			// System.out.println(new Date() + " creating table: " +
+			// tableSchema.getTableName());
 			tableCreated = db.createSymbolicTable(tableSchema);
 			if (tableCreated) {
 				// fill the table until it reaches cardinality value (table
 				// size)
+				// System.out.println(new Date() + " filling table");
 				fillTable();
-				// TODO MJCG - insert constraints in PTable
+				// next, insert constraints in PTable
 				// mysql does not support check predicates, so this operation is
-				// not possible
+				// not possible for this version
 			}
 		}
+//		System.out.println(new Date() + " open table finished");
 	}
 
 	/**
@@ -77,26 +91,37 @@ public class RATable extends RAOperator {
 	 */
 	@Override
 	public Tuple getNext() {
-		// if the data is not loaded
-		// go to the database
-		if (result == null) {
-			// perform table scan of the table
-			// and store all tuples in memory
-			try {
-				result = db.getData(tableSchema);
-				// reset indexResult
-				indexResult = 0;
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}
-		}
 		// get the next tuple
 		Tuple tuple = null;
 		// returns null if all tuples have been returned
-		if (indexResult < result.size()) {
-			tuple = result.get(indexResult);
+		if (indexResult <= _cardinality) {
+			// if the data is not loaded or the tuple is not in this page
+			// go to the database
+			if (result == null || indexResult > ((page + 1) * LIMIT)) {
+				if (indexResult > ((page + 1) * LIMIT)) {
+					// increment by 1
+					page += 1;
+				}
+				// get the data for that page
+				try {
+					result = db.getData(tableSchema, page * LIMIT, LIMIT);
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+			int indexInPage = indexResult;
+			if (page > 0) {
+				indexInPage = (indexResult % (page * LIMIT));
+				//last tuple from the list
+				if (indexInPage == 0) {
+					indexInPage = 1000;
+				}
+			}
+			tuple = result.get(indexInPage - 1);
 			// increment the index
 			indexResult++;
+		} else {
+			close();
 		}
 		return tuple;
 	}
@@ -111,37 +136,34 @@ public class RATable extends RAOperator {
 	/**
 	 * Fill table with symbolic data
 	 */
-	private void fillTable() throws Exception{
+	private void fillTable() throws Exception {
 		// creating list of numbers
 		List<Integer> numbers = Stream.iterate(1, n -> n + 1).limit(_cardinality).collect(Collectors.toList());
-		List<String> inserts = new ArrayList<>();
+		// List<String> inserts = new ArrayList<>();
 		// creating insert sql statement
 		StringBuffer insert = new StringBuffer("insert into ").append(_sbSchema).append(".")
 				.append(tableSchema.getTableName()).append("(");
 		// adding column names to insert statement
 		insert.append(tableSchema.getColNames().stream().collect(Collectors.joining(", ")));
 		insert.append(") values (");
+		insert.append(tableSchema.getColNames().stream().map(s -> "?").collect(Collectors.joining(", ")));
+		insert.append(")");
+		List<List<String>> data = new ArrayList<>();
 		// adding column values to insert statement
 		for (Integer i : numbers) {
-			StringBuffer row = new StringBuffer(insert.toString());
-			row.append(
-					tableSchema.getColNames().stream().map(s -> "'" + s + i + "'").collect(Collectors.joining(", ")));
-			row.append(")");
-			// adding insert statement to the list
-			inserts.add(row.toString());
+			List tuple = tableSchema.getColNames().stream().map(s -> s + i).collect(Collectors.toList());
+			data.add(tuple);
+			// StringBuffer row = new StringBuffer(insert.toString());
+			//
+			// row.append(
+			// tableSchema.getColNames().stream().map(s -> "'" + s + i +
+			// "'").collect(Collectors.joining(", ")));
+			// row.append(")");
+			// // adding insert statement to the list
+			// inserts.add(row.toString());
 		}
-
+		db.execUpdates(insert.toString(), data);
 		// inserting all the rows
-		db.insertSymbolicData(inserts);
-	}
-
-	private void insertConstraints() {
-		// constraints are located in tableDescription object
-		// for (Constraint c : tableDesc.constraints) {
-		// // so far, CHECK is the only constraint supported
-		// if (c.getType().equals(ConstraintType.CHECK)) {
-		// // TODO MJCG Implement this
-		// }
-		// }
+		// db.execCommands(inserts);
 	}
 }

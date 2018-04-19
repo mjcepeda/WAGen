@@ -13,7 +13,11 @@ import edu.rit.wagen.dto.RAAnnotation;
 import edu.rit.wagen.dto.RAAnnotation.DistributionType;
 import edu.rit.wagen.dto.RAQuery;
 import edu.rit.wagen.planner.ExecutionPlanner;
-
+/**
+ * THIS CLASS CONTAINS TESTS WITH AN OBSOLETE VERSION OF THE EXECUTION PLANNER MODULE
+ * @author Maria Cepeda
+ *
+ */
 public class ExecutionPlannerTest {
 	// incorrect queries
 	public static final String FAIL_QUERY1 = "\\select_{age < 20 and age > 40} customer;\n";
@@ -86,9 +90,9 @@ public class ExecutionPlannerTest {
 		constraints.put(1, new RAAnnotation(15, DistributionType.NA));
 		constraints.put(2, new RAAnnotation(5, DistributionType.NA));
 		constraints.put(4, new RAAnnotation(8, DistributionType.ZIFPS));
-		List<RAQuery> queries = Arrays.asList(new RAQuery(FAIL_QUERY1, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(FAIL_QUERY1, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.init(schema, queries);
 		// planner.printQuery(q1);
 	}
 
@@ -100,9 +104,9 @@ public class ExecutionPlannerTest {
 		Map<Integer, RAAnnotation> constraints = new HashMap<>();
 		constraints.put(1, new RAAnnotation(15, DistributionType.NA));
 		constraints.put(2, new RAAnnotation(5, DistributionType.NA));
-		List<RAQuery> queries = Arrays.asList(new RAQuery(FAIL_QUERY1, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(FAIL_QUERY1, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.init(schema, queries);
 	}
 
 	// @Test
@@ -113,9 +117,9 @@ public class ExecutionPlannerTest {
 		Map<Integer, RAAnnotation> constraints = new HashMap<>();
 		constraints.put(1, new RAAnnotation(15, DistributionType.NA));
 		constraints.put(2, new RAAnnotation(5, DistributionType.NA));
-		List<RAQuery> queries = Arrays.asList(new RAQuery(FAIL_QUERY2, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(FAIL_QUERY2, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.init(schema, queries);
 	}
 
 	// @Test
@@ -125,9 +129,9 @@ public class ExecutionPlannerTest {
 		Map<Integer, RAAnnotation> constraints = new HashMap<>();
 		constraints.put(1, new RAAnnotation(15, DistributionType.NA));
 		constraints.put(2, new RAAnnotation(5, DistributionType.NA));
-		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY1, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY1, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.init(schema, queries);
 	}
 
 	// @Test
@@ -138,9 +142,9 @@ public class ExecutionPlannerTest {
 		Map<Integer, RAAnnotation> constraints = new HashMap<>();
 		constraints.put(1, new RAAnnotation(5, DistributionType.NA));
 		constraints.put(2, new RAAnnotation(15, DistributionType.NA));
-		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY3, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY3, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.init(schema, queries);
 	}
 
 	// @Test
@@ -151,12 +155,12 @@ public class ExecutionPlannerTest {
 		Map<Integer, RAAnnotation> constraints = new HashMap<>();
 		constraints.put(1, new RAAnnotation(15, DistributionType.NA));
 		constraints.put(2, new RAAnnotation(5, DistributionType.NA));
-		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY3_2, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY3_2, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.init(schema, queries);
 	}
 
-	// @Test
+	@Test
 	public void test5_TPCH_Q2_1join() {
 		List<String> schema = Arrays.asList(TABLE_REGION, TABLE_NATION);
 		Map<Integer, RAAnnotation> constraints = new HashMap<>();
@@ -169,9 +173,9 @@ public class ExecutionPlannerTest {
 		// join cardinality 6
 		constraints.put(4, new RAAnnotation(6, DistributionType.NA));
 		// no restrictions for select operation, uniform distribution
-		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY4, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY4, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.init(schema, queries);
 		// planner.printQuery(QUERY4);
 	}
 
@@ -190,9 +194,9 @@ public class ExecutionPlannerTest {
 		// join id 7 (nation, supplier) cardinality (size=12)
 		constraints.put(6, new RAAnnotation(10, DistributionType.NA));
 		// the cardinality of the final sql is equal to constraint 6 value
-		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY5, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY5, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		planner.init(schema, queries);
 		// planner.printQuery(QUERY5);
 	}
 
@@ -219,8 +223,8 @@ public class ExecutionPlannerTest {
 		// join cardinality 20 (s_suppkey = ps_suppkey)
 		constraints.put(8, new RAAnnotation(20, DistributionType.UNIFORM));
 		// the cardinality of the final sql must be 20
-		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY6, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY6, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
 		// planner.init(schema, queries);
 		// planner.printQuery(QUERY6);
 	}
@@ -248,13 +252,13 @@ public class ExecutionPlannerTest {
 		// join cardinality 20 (s_suppkey = ps_suppkey)
 		constraints.put(5, new RAAnnotation(20, DistributionType.UNIFORM));
 		// the cardinality of the final sql must be 20
-		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY8, constraints));
-		ExecutionPlanner planner = new ExecutionPlanner();
-		 planner.init(schema, queries);
+//		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY8, constraints));
+//		ExecutionPlanner planner = new ExecutionPlanner();
+//		 planner.init(schema, queries);
 //		planner.printQuery(QUERY8);
 	}
 	
-	@Test
+//	@Test
 	public void test2Queries() {
 		List<String> schema = Arrays.asList(
 				"CREATE TABLE CUSTOMER (c_id int NOT NULL PRIMARY KEY, c_acctbal varchar(50), name varchar(80) unique, age int)",
@@ -269,11 +273,11 @@ public class ExecutionPlannerTest {
 		constraintsQuery2.put(1, new RAAnnotation(4, DistributionType.NA));
 		//select cardinality 2
 		constraintsQuery2.put(2, new RAAnnotation(2, DistributionType.NA));
-		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY1, constraintsQuery1), new RAQuery(QUERY1_2, constraintsQuery1));
-		ExecutionPlanner planner = new ExecutionPlanner();
+		List<RAQuery> queries = Arrays.asList(new RAQuery(QUERY1, "", 2, constraintsQuery1), new RAQuery(QUERY1_2, "", 0, constraintsQuery1));
+//		ExecutionPlanner planner = new ExecutionPlanner();
 //		planner.printQuery(QUERY1);
 //		planner.printQuery(QUERY3);
-		planner.init(schema, queries);
+//		planner.init();
 	}
 
 	// @Test

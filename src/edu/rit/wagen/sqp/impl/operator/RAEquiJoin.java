@@ -2,11 +2,15 @@ package edu.rit.wagen.sqp.impl.operator;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Random;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -28,36 +32,74 @@ import edu.rit.wagen.utils.Utils.ConstraintType;
 import ra.RAXNode.JOIN;
 
 /**
- * Join Operator. We consider only left-deep query plans, i.e., the outer node
- * of each join is always a leaf node or a select operation
- * 
+ * The Class RAEquiJoin.
  * @author Maria Cepeda
- *
  */
 public class RAEquiJoin extends BinaryOperation {
 
+	/** The node. */
 	private JOIN _node;
+	
+	/** The counter dist. */
 	private int _counterDist;
+	
+	/** The dis type. */
 	private DistributionType _disType;
+	
+	/** The dis values. */
 	// distribution values list
 	private int[] _disValues;
+	
+	/** The m. */
 	// distribution value
 	private int _m;
+	
+	/** The j. */
 	// join attributes (k from right source S), (j from left source R)
 	private String k, j;
+	
+	/** The table S. */
 	// table S with foreign key to R table
 	private TableSchema tableS;
+	
+	/** The op S. */
 	// S operator
 	private RAOperator opS;
+	
+	/** The op R. */
 	// R operator
 	private RAOperator opR;
+	
+	/** The table R. */
 	// table R
 	private TableSchema tableR;
+	
+	/** The r. */
 	private Tuple r;
+	
+	/** The dist ks. */
 	// subset of ks that sum the cardinality
 	private List<Long> distKs;
+	
+	/** The list input S. */
 	private List<Tuple> listInputS;
+	// store all the update stmts for this operation
+	// we only access to the DB once
+	/** The data. */
+	// private List<String> stmts = new ArrayList<>();
+	private List<List<String>> data = new ArrayList<>();
 
+	/**
+	 * Instantiates a new RA equi join.
+	 *
+	 * @param node the node
+	 * @param leftSource the left source
+	 * @param rightSource the right source
+	 * @param constraints the constraints
+	 * @param sbSchemaName the sb schema name
+	 * @param realSchema the real schema
+	 * @throws Exception the exception
+	 */
 	public RAEquiJoin(JOIN node, RAOperator leftSource, RAOperator rightSource, RAAnnotation constraints,
 			String sbSchemaName, String realSchema) throws Exception {
 		super(leftSource, rightSource, sbSchemaName, realSchema);
@@ -70,6 +112,9 @@ public class RAEquiJoin extends BinaryOperation {
 		setConstraints(constraints);
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.sqp.iapi.operator.RAOperator#open()
+	 */
 	@Override
 	public void open() throws Exception {
 		_isPreGrouped = isPreGrouped();
@@ -104,23 +149,18 @@ public class RAEquiJoin extends BinaryOperation {
 			// this list will contain c tuples (c = cardinality)
 			listInputS = mapResultS.values().stream().flatMap(l -> l.stream()).collect(Collectors.toList());
 		} else {
-			// TODO MJCG Sometimes this distribution generator may leave some
-			// tuples from right source table (S)
-			// without setting a real join id, test this solution
 			// instantiate a distribution generator D (QAGen:347)
-			AbstractIntegerDistribution distribution = null;
-			if (_disType.equals(DistributionType.ZIFPS)) {
-				distribution = new ZipfDistribution(_cardinality, 1);
-			} else {
-				distribution = new UniformIntegerDistribution(1, _cardinality);
-			}
 			// generating the distribution values for every tuple from S
 			// the domain is the size of R
+			AbstractIntegerDistribution distribution = getDistributionGenerator(_cardinality, opR._cardinality);
 			_disValues = distribution.sample(opR._cardinality);
 			// _disValues = getUniformDist(opR._cardinality, _cardinality);
 		}
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.sqp.iapi.operator.RAOperator#getNext()
+	 */
 	@Override
 	public Tuple getNext() throws Exception {
 		Tuple t = null;
@@ -136,6 +176,9 @@ public class RAEquiJoin extends BinaryOperation {
 		return t;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.sqp.iapi.operator.RAOperator#close()
+	 */
 	@Override
 	public void close() {
 		getLeftSource().close();
@@ -143,6 +186,9 @@ public class RAEquiJoin extends BinaryOperation {
 		reset();
 	}
 
+	/**
+	 * Reset.
+	 */
 	private void reset() {
 		_isPreGrouped = null;
 		_cardinality = 0;
@@ -153,8 +199,20 @@ public class RAEquiJoin extends BinaryOperation {
 		k = null;
 		j = null;
 		_results = null;
+		data = new ArrayList<>();
+		distKs = null;
+		listInputS = null;
+		opR = null;
+		opS = null;
+		tableR = null;
+		tableS = null;
 	}
 
+	/**
+	 * Sets the R and S.
+	 *
+	 * @throws SQLException the SQL exception
+	 */
 	private void setRAndS() throws SQLException {
 		// symbol of the join key attribute from left source
 		String leftColumn = _node.getCondition().substring(0, _node.getCondition().toLowerCase().indexOf(Utils.EQUALS))
@@ -171,7 +229,16 @@ public class RAEquiJoin extends BinaryOperation {
 		if (getRightSource() instanceof RATable) {
 			tableOp = (RATable) getRightSource();
 		} else {
-			tableOp = (RATable) ((UnaryOperation) getRightSource()).getSource();
+			UnaryOperation op = (UnaryOperation) getRightSource();
+			while (tableOp == null) {
+				if (op.getSource() instanceof RATable) {
+					tableOp = (RATable) op.getSource();
+				} else {
+					op = (UnaryOperation) op.getSource();
+				}
+			}
+			// tableOp = (RATable) ((UnaryOperation)
+			// getRightSource()).getSource();
 		}
 		String tableReferenced = getReferenceTable(tableOp.tableSchema, leftColumn);
 		if (tableReferenced != null) {
@@ -199,7 +266,7 @@ public class RAEquiJoin extends BinaryOperation {
 				tableS = tableRight.tableSchema;
 			} else {
 				// getting the table description from the join attribute
-				tableS = db.getReferencerTable(_realSchema, tableR, rightColumn);
+				tableS = db.getReferencerTable(_realSchema, tableR, rightColumn, leftColumn);
 			}
 		}
 		// set the symbolic database name
@@ -207,6 +274,11 @@ public class RAEquiJoin extends BinaryOperation {
 		tableR.setSchemaName(_sbSchema);
 	}
 
+	/**
+	 * Sets the constraints.
+	 *
+	 * @param constraints the new constraints
+	 */
 	private void setConstraints(RAAnnotation constraints) {
 		// setting cardinality constraints
 		if (constraints == null) {
@@ -249,6 +321,13 @@ public class RAEquiJoin extends BinaryOperation {
 
 	}
 
+	/**
+	 * Gets the reference table.
+	 *
+	 * @param table the table
+	 * @param joinColumn the join column
+	 * @return the reference table
+	 */
 	private String getReferenceTable(TableSchema table, String joinColumn) {
 		String t = null;
 		boolean found = Boolean.FALSE;
@@ -265,6 +344,11 @@ public class RAEquiJoin extends BinaryOperation {
 		return t;
 	}
 
+	/**
+	 * Checks if is pre grouped.
+	 *
+	 * @return true, if is pre grouped
+	 */
 	private boolean isPreGrouped() {
 		if (_isPreGrouped == null) {
 			// if the cardinality is equal to the input cardinality of S
@@ -273,10 +357,21 @@ public class RAEquiJoin extends BinaryOperation {
 			if (_cardinality != opS._cardinality) {
 				// check if the input S is pre-grouped on the join attribute k
 				if (opS instanceof RAEquiJoin) {
+					List<String> childTableS = new ArrayList();
+					RAOperator aux = opS;
+					while (aux instanceof RAEquiJoin) {
+						childTableS.add(((RAEquiJoin) opS).tableS.getTableName());
+						aux = ((RAEquiJoin) opS).opS;
+					}
+					_isPreGrouped = childTableS.contains(tableR.getTableName());
 					// _isPreGrouped = opS._isPreGrouped;
 					// if (!_isPreGrouped) {
-					_isPreGrouped = ((RAEquiJoin) opS).tableS.getColNames().contains(k)
-							&& opS._cardinality != ((RAEquiJoin) opS).opS._cardinality;
+					// not sure about the following assigment
+					// _isPreGrouped = ((RAEquiJoin)
+					// opS).tableS.getColNames().contains(k)
+					// && opS._cardinality != ((RAEquiJoin)
+					// opS).opS._cardinality;
+					// _isPreGrouped = ((RAEquiJoin) opS).k.equals(k);
 					// }
 				} else {
 					_isPreGrouped = Boolean.FALSE;
@@ -290,17 +385,27 @@ public class RAEquiJoin extends BinaryOperation {
 		return _isPreGrouped;
 	}
 
+	/**
+	 * Join case 1.
+	 *
+	 * @return the tuple
+	 * @throws Exception the exception
+	 */
 	private Tuple joinCase1() throws Exception {
 		Tuple t = null;
 		// if cardinality has not been reached
 		if (_cardinality > _counter) {
+//			System.out.println(
+//					new Date() + " join getNext() " + k + " cardinality " + _cardinality + " counter " + _counter);
 			// if the distribution value is 0
 			if (_m == 0) {
 				// increment the distribution counter
 				_counterDist++;
 				// call the distribution generator and get the new distribution
 				// value for R
-				_m = _disValues[_counterDist];
+				if (_counterDist < _disValues.length) {
+					_m = _disValues[_counterDist];
+				}
 				r = opR.getNext();
 			}
 			// m is the number of tuples from S that should be
@@ -312,9 +417,14 @@ public class RAEquiJoin extends BinaryOperation {
 				// join r and s with positive tuple joining
 				// return this tuple to its parent
 				t = positiveJoinCase1(r, s);
+				// increment cardinality counter
+				_counter++;
+			} else {
+				System.err.println("Join operation not possible, there is no more tuples to join");
+				close();
 			}
-			// increment cardinality counter
-			_counter++;
+			//
+//			System.out.println(new Date() + " join getNext() finished " + k);
 		} else {
 			// process negative tuple joining
 			// return null to its parent
@@ -323,6 +433,12 @@ public class RAEquiJoin extends BinaryOperation {
 		return t;
 	}
 
+	/**
+	 * Join case 2.
+	 *
+	 * @return the tuple
+	 * @throws Exception the exception
+	 */
 	private Tuple joinCase2() throws Exception {
 		Tuple t = null;
 		// if cardinality has not been reached
@@ -344,9 +460,12 @@ public class RAEquiJoin extends BinaryOperation {
 				// join r and s with positive tuple joining
 				// return this tuple to its parent
 				t = positiveJoinCase1(r, s);
+				// increment cardinality counter
+				_counter++;
+			} else {
+				System.err.println("Join operation not possible, there is no more tuples to join");
+				close();
 			}
-			// increment cardinality counter
-			_counter++;
 		} else {
 			// process negative tuple joining
 			// return null to its parent
@@ -355,6 +474,14 @@ public class RAEquiJoin extends BinaryOperation {
 		return t;
 	}
 
+	/**
+	 * Positive join case 1.
+	 *
+	 * @param r the r
+	 * @param s the s
+	 * @return the tuple
+	 * @throws Exception the exception
+	 */
 	private Tuple positiveJoinCase1(Tuple r, Tuple s) throws Exception {
 		Tuple join = new Tuple();
 		// replace s.k for the symbol r.j
@@ -362,8 +489,8 @@ public class RAEquiJoin extends BinaryOperation {
 		Map<String, String> mapR = r.getValues();
 		// updating symbol from the join attribute
 		String replaced = mapS.replace(k, mapR.get(j));
-		// update the database
-		updateBaseTable(mapR.get(j), replaced);
+		// add update statement to the list
+		data.add(Arrays.asList(mapR.get(j), replaced));
 		Map<String, String> joinMap = new HashMap<>(mapR);
 		// perform an equi-join on tuple r and s
 		mapS.forEach((k, v) -> joinMap.putIfAbsent(k, v));
@@ -371,61 +498,102 @@ public class RAEquiJoin extends BinaryOperation {
 		return join;
 	}
 
+	/**
+	 * Negative join case 1.
+	 *
+	 * @throws Exception the exception
+	 */
 	private void negativeJoinCase1() throws Exception {
-		// get the remaining results from R
-		// and collect them
-		Tuple rt = opR.getNext();
-		List<Tuple> colR = new ArrayList<>();
-		while (rt != null) {
-			colR.add(rt);
-			rt = opR.getNext();
+//		 System.out.println(new Date() + " join getNext() cardinality reached " + k);
+		int counter = 0;
+		// count the remaining results from R
+		while (opR.getNext() != null) {
+			counter++;
 		}
-		// get the list of unused ids from base table R
-		List<String> jRemainingList = getRemainingIdsFromR(colR);
-		// join the remaining tuple from S with unused ids from R
+		// count the total number of results from R base table
+		int totalRows = db.countData(tableR);
+		// number of js in the result list
+		Set<String> jUsedSet = new HashSet<>();
+		_results.forEach(tuple -> jUsedSet.add(tuple.getValues().get(j)));
+		int jUsed = jUsedSet.size();
+		// from number cannot be equal to the last j used
+		if (counter == 0) {
+			counter = 1;
+		}
+		int from = jUsed + counter;
+		if ((opS instanceof RAEquiJoin || opS instanceof RASelect) && (totalRows == from || from > totalRows)) {
+			// join S with any j from base table
+			from = 1;
+		}
+		// create a random with the remaining ids
+		Random rd = new Random();
+		// join the remaining tuple from S with unused ids from base table R
 		Tuple t = null;
-		if ((t = opS.getNext()) != null) {
-			negativeJoinUpdate(jRemainingList, t);
+		while ((t = opS.getNext()) != null) {
+			if (totalRows == from || from > totalRows) {
+				throw new Exception("There is no remaining js to perform the negative join");
+			}
+			int id = rd.nextInt((totalRows - from) + 1) + from;
+			data.add(Arrays.asList(j + id, t.getValues().get(k)));
 		}
-		// update any tuple from S that remains no updated
-		List<Tuple> listS = db.getTuplesForUpdate(tableS, k);
-		for (Tuple tuple : listS) {
-			negativeJoinUpdate(jRemainingList, tuple);
+//		 System.out.println(new Date() + " join getNext() executing updates: " 	+ data.size());
+		// count the total number of results from R base table
+		int totalRowsS = db.countData(tableS);
+		// get the number of updated tuples from S
+		int updatedS = data.size();
+		// execute updates
+		if (!data.isEmpty()) {
+			db.execUpdates(updateStmt2(), data);
+			data.clear();
 		}
+		for (int i = updatedS + 1; i <= totalRowsS; i++) {
+			// update any tuple from S that remains no updated
+			// join it with any j from base table
+			int id = rd.nextInt((totalRows - 1) + 1) + 1;
+			data.add(Arrays.asList(j + id, k + i));
+		}
+//		 System.out.println(new Date() + " join getNext() executing remaining updates: " + data.size());
+		// update the remaining tuples
+		if (!data.isEmpty()) {
+			db.execUpdates(updateStmt2(), data);
+			data.clear();
+		}
+		close();
+//		 System.out.println(new Date() + " join getNext() cardinality reached finished");
 	}
 
-	private void negativeJoinUpdate(List<String> jRemainingIds, Tuple t) throws Exception {
-		if (jRemainingIds.size() > 0) {
-			UniformIntegerDistribution distribution = new UniformIntegerDistribution(0, jRemainingIds.size() - 1);
-			int index = distribution.sample();
-			// update table (S)
-			updateBaseTable(jRemainingIds.get(index), t.getValues().get(k));
-		} else {
-			// TODO Change this please
-			throw new Exception("There is no ids from " + tableR.getTableName() + " to perform the negative join");
-		}
-	}
-
-	private List<String> getRemainingIdsFromR(List<Tuple> inputR) throws SQLException {
-		// extract from the results list the list of js already used
-		List<String> jUsedList = new ArrayList<>();
-		_results.forEach(tuple -> jUsedList.add(tuple.getValues().get(j)));
-		// do the same thing with the list of remaining results from the
-		// left source
-		inputR.forEach(tuple -> jUsedList.add(tuple.getValues().get(j)));
-		// get all ids from database
-		// TODO MJCG Not very efficient, time to change it?
-		List<Tuple> tableScan = db.getData(tableR);
-		List<String> jRemainingList = new ArrayList<>();
-		tableScan.forEach(tuple -> jRemainingList.add(tuple.getValues().get(j)));
-		jRemainingList.removeAll(jUsedList);
-		return jRemainingList;
-	}
-
-	private void updateBaseTable(String newValue, String oldValue) throws Exception {
+	/**
+	 * Update stmt 2.
+	 *
+	 * @return the string
+	 * @throws Exception the exception
+	 */
+	private String updateStmt2() throws Exception {
 		StringBuffer sb = new StringBuffer("UPDATE ");
-		db.execCommand(sb.append(_sbSchema).append(".").append(tableS.getTableName()).append(" set ").append(k)
-				.append("='").append(newValue).append("' where ").append(k).append("='").append(oldValue).append("'")
-				.toString());
+		return sb.append(_sbSchema).append(".").append(tableS.getTableName()).append(" set ").append(k)
+				.append("= ? where ").append(k).append("= ?").toString();
+	}
+
+	/**
+	 * Gets the distribution generator.
+	 *
+	 * @param cardinality the cardinality
+	 * @param childCardinality the child cardinality
+	 * @return the distribution generator
+	 */
+	private AbstractIntegerDistribution getDistributionGenerator(int cardinality, int childCardinality) {
+		AbstractIntegerDistribution distribution = null;
+		if (_disType.equals(DistributionType.ZIFPS)) {
+			distribution = new ZipfDistribution(cardinality, 1);
+		} else {
+			double frequency = ((double) cardinality / (double) childCardinality);
+			int min = ((int) Math.floor(frequency)) == 0 ? 1 : (int) Math.floor(frequency);
+//			distribution = new UniformIntegerDistribution(min, (int) Math.ceil(frequency));
+			distribution = new UniformIntegerDistribution((int) Math.ceil(frequency), (int) Math.ceil(frequency));
+			// System.out.println(new Date() + " join creating distribution for
+			// " + k + "=" + j + " frequency " + frequency
+			// + ", min " + min + ", sample " + childCardinality);
+		}
+		return distribution;
 	}
 }

@@ -11,18 +11,37 @@ import org.chocosolver.solver.variables.IntVar;
 
 import edu.rit.wagen.dto.Predicate;
 
+/**
+ * The Class ConstraintSolver.
+ * @author Maria Cepeda
+ */
 public class ConstraintSolver {
+	
+	/**
+	 * Solve predicates.
+	 *
+	 * @param colPredicates the col predicates
+	 * @return the map
+	 * @throws Exception the exception
+	 */
 	public static Map<String, IntVar> solvePredicates(List<Predicate> colPredicates) throws Exception {
 		// map of symbol and variables
 		Map<String, IntVar> mapVars = new HashMap<>();
 		Model model = createModel(colPredicates, mapVars);
 		Solution solution = model.getSolver().findSolution();
 		if (solution == null) {
-			throw new Exception("The constraint solver has not found results for that set of constraints");
+			throw new Exception("The constraint solver has not found results for that set of constraints " + colPredicates);
 		}
 		return mapVars;
 	}
 
+	/**
+	 * Checks if is sat.
+	 *
+	 * @param colPredicates the col predicates
+	 * @return true, if is sat
+	 * @throws Exception the exception
+	 */
 	public static boolean isSAT(List<Predicate> colPredicates) throws Exception {
 		// map of symbol and variables
 		Map<String, IntVar> mapVars = new HashMap<>();
@@ -31,6 +50,14 @@ public class ConstraintSolver {
 		return solution != null;
 	}
 	
+	/**
+	 * Creates the model.
+	 *
+	 * @param colPredicates the col predicates
+	 * @param mapVars the map vars
+	 * @return the model
+	 * @throws Exception the exception
+	 */
 	private static Model createModel(List<Predicate> colPredicates, Map<String, IntVar> mapVars) throws Exception {
 		int MAX_VALUE = 100000000;
 		// creating model

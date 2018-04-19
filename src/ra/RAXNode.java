@@ -14,50 +14,112 @@ import edu.rit.wagen.sqp.impl.operator.RAProjection;
 import edu.rit.wagen.sqp.impl.operator.RASelect;
 import edu.rit.wagen.sqp.impl.operator.RATable;
 
+/**
+ * The Class RAXNode.
+ */
 public abstract class RAXNode {
 
+	/** The out. */
 	protected static PrintStream out = System.out;
+	
+	/** The err. */
 	protected static PrintStream err = System.err;
+	
+	/** The view generated count. */
 	protected static int _viewGeneratedCount = 0;
 	// WAGen relational algebra id
 	// with this id we can identify the operations
+	/** The ra id. */
 	// and set its cardinality constraints
 	protected int _raId;
+	
+	/** The ra id count. */
 	protected static int _raIdCount = 0;
 
+	/**
+	 * Generated ra id.
+	 *
+	 * @return the int
+	 */
 	public static int generatedRaId() {
 		_raIdCount++;
 		return _raIdCount;
 	}
 
+	/**
+	 * Prints the ra id.
+	 *
+	 * @return the string
+	 */
 	public String printRaId() {
 		return "[id=" + _raId + "]";
 	}
 
+	/**
+	 * Reset ra id.
+	 */
 	public static void resetRaId() {
 		_raIdCount = 0;
 	}
 
+	/**
+	 * Gets the operator.
+	 *
+	 * @param mapConstraints the map constraints
+	 * @param sbSchema the sb schema
+	 * @param realSchema the real schema
+	 * @return the operator
+	 * @throws Exception the exception
+	 */
 	public abstract RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception;
 
+	/**
+	 * Generate view name.
+	 *
+	 * @return the string
+	 */
 	public static String generateViewName() {
 		_viewGeneratedCount++;
 		return "RA_TMP_VIEW_" + _viewGeneratedCount;
 	}
 
+	/**
+	 * Reset view name generator.
+	 */
 	public static void resetViewNameGenerator() {
 		_viewGeneratedCount = 0;
 	}
 
+	/**
+	 * The Enum Status.
+	 */
 	public enum Status {
-		ERROR, UNCHECKED, CORRECT
+		
+		/** The error. */
+		ERROR, 
+ /** The unchecked. */
+ UNCHECKED, 
+ /** The correct. */
+ CORRECT
 	}
 
+	/** The status. */
 	protected Status _status;
+	
+	/** The view name. */
 	protected String _viewName;
+	
+	/** The output schema. */
 	protected DB.TableSchema _outputSchema;
+	
+	/** The children. */
 	protected ArrayList<RAXNode> _children;
 
+	/**
+	 * Instantiates a new RAX node.
+	 *
+	 * @param children the children
+	 */
 	protected RAXNode(ArrayList<RAXNode> children) {
 		_raId = generatedRaId();
 		_status = Status.UNCHECKED;
@@ -66,26 +128,70 @@ public abstract class RAXNode {
 		_children = children;
 	}
 
+	/**
+	 * Gets the view name.
+	 *
+	 * @return the view name
+	 */
 	public String getViewName() {
 		return _viewName;
 	}
 
+	/**
+	 * Gets the num children.
+	 *
+	 * @return the num children
+	 */
 	public int getNumChildren() {
 		return _children.size();
 	}
 
+	/**
+	 * Gets the child.
+	 *
+	 * @param i the i
+	 * @return the child
+	 */
 	public RAXNode getChild(int i) {
 		return _children.get(i);
 	}
 
+	/**
+	 * Gen view def.
+	 *
+	 * @param db the db
+	 * @return the string
+	 * @throws SQLException the SQL exception
+	 * @throws ValidateException the validate exception
+	 */
 	public abstract String genViewDef(DB db) throws SQLException, ValidateException;
 
+	/**
+	 * Gen view create statement.
+	 *
+	 * @param db the db
+	 * @return the string
+	 * @throws SQLException the SQL exception
+	 * @throws ValidateException the validate exception
+	 */
 	public String genViewCreateStatement(DB db) throws SQLException, ValidateException {
 		return "CREATE VIEW " + _viewName + " AS " + genViewDef(db);
 	}
 
+	/**
+	 * To print string.
+	 *
+	 * @return the string
+	 */
 	public abstract String toPrintString();
 
+	/**
+	 * Prints the.
+	 *
+	 * @param verbose the verbose
+	 * @param indent the indent
+	 * @param out the out
+	 */
 	public void print(boolean verbose, int indent, PrintStream out) {
 		for (int i = 0; i < indent; i++)
 			out.print(" ");
@@ -104,6 +210,12 @@ public abstract class RAXNode {
 		return;
 	}
 
+	/**
+	 * Validate.
+	 *
+	 * @param db the db
+	 * @throws ValidateException the validate exception
+	 */
 	public void validate(DB db) throws ValidateException {
 		// Validate children first; any exception thrown there
 		// will shortcut the call.
@@ -136,12 +248,25 @@ public abstract class RAXNode {
 		return;
 	}
 
+	/**
+	 * Execute.
+	 *
+	 * @param db the db
+	 * @param out the out
+	 * @throws SQLException the SQL exception
+	 */
 	public void execute(DB db, PrintStream out) throws SQLException {
 		assert (_status == Status.CORRECT);
 		db.execQueryAndOutputResult(out, "SELECT * FROM " + _viewName);
 		return;
 	}
 
+	/**
+	 * Clean.
+	 *
+	 * @param db the db
+	 * @throws SQLException the SQL exception
+	 */
 	public void clean(DB db) throws SQLException {
 		if (_status == Status.UNCHECKED) {
 			// Should be the case that the view wasn't actually created.
@@ -159,49 +284,103 @@ public abstract class RAXNode {
 		return;
 	}
 
+	/**
+	 * The Class ValidateException.
+	 */
 	public static class ValidateException extends Exception {
+		
+		/** The sql exception. */
 		protected SQLException _sqlException;
+		
+		/** The error node. */
 		protected RAXNode _errorNode;
 
+		/**
+		 * Instantiates a new validate exception.
+		 *
+		 * @param sqlException the sql exception
+		 * @param errorNode the error node
+		 */
 		public ValidateException(SQLException sqlException, RAXNode errorNode) {
 			_sqlException = sqlException;
 			_errorNode = errorNode;
 		}
 
+		/**
+		 * Instantiates a new validate exception.
+		 *
+		 * @param message the message
+		 * @param errorNode the error node
+		 */
 		public ValidateException(String message, RAXNode errorNode) {
 			super(message);
 			_sqlException = null;
 			_errorNode = errorNode;
 		}
 
+		/**
+		 * Gets the SQL exception.
+		 *
+		 * @return the SQL exception
+		 */
 		public SQLException getSQLException() {
 			return _sqlException;
 		}
 
+		/**
+		 * Gets the error node.
+		 *
+		 * @return the error node
+		 */
 		public RAXNode getErrorNode() {
 			return _errorNode;
 		}
 	}
 
+	/**
+	 * The Class TABLE.
+	 */
 	public static class TABLE extends RAXNode {
+		
+		/** The table name. */
 		protected String _tableName;
 
+		/**
+		 * Instantiates a new table.
+		 *
+		 * @param tableName the table name
+		 */
 		public TABLE(String tableName) {
 			super(new ArrayList<RAXNode>());
 			_tableName = tableName;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException {
 			return "SELECT DISTINCT * FROM " + _tableName;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			return _tableName + printRaId();
 		}
 
+		/**
+		 * Gets the table name.
+		 *
+		 * @return the table name
+		 */
 		public String getTableName() {
 			return _tableName;
 		}
+		
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			RAAnnotation annotation = mapConstraints.get(_raId);
@@ -217,26 +396,51 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * The Class SELECT.
+	 */
 	public static class SELECT extends RAXNode {
+		
+		/** The condition. */
 		protected String _condition;
 
+		/**
+		 * Instantiates a new select.
+		 *
+		 * @param condition the condition
+		 * @param input the input
+		 */
 		public SELECT(String condition, RAXNode input) {
 			super(new ArrayList<RAXNode>(Arrays.asList(input)));
 			_condition = condition;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException {
 			return "SELECT * FROM " + getChild(0).getViewName() + " WHERE " + _condition;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			return "\\select_" + printRaId() + "{" + _condition + "}";
 		}
 		
+		/**
+		 * Gets the condition.
+		 *
+		 * @return the condition
+		 */
 		public String getCondition() {
 			return _condition;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			RAAnnotation annotation = mapConstraints.get(_raId);
@@ -247,23 +451,43 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * The Class PROJECT.
+	 */
 	public static class PROJECT extends RAXNode {
+		
+		/** The columns. */
 		protected String _columns;
 
+		/**
+		 * Instantiates a new project.
+		 *
+		 * @param columns the columns
+		 * @param input the input
+		 */
 		public PROJECT(String columns, RAXNode input) {
 			super(new ArrayList<RAXNode>(Arrays.asList(input)));
 			_columns = columns;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException {
 			return "SELECT DISTINCT " + _columns + " FROM " + getChild(0).getViewName();
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			// TODO MJCG Maybe projection does not need an id
 			return "\\project_" + printRaId() + "{" + _columns + "}";
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			RAProjection op = new RAProjection(getChild(0).getOperator(mapConstraints, sbSchema, realSchema), this, sbSchema, realSchema);
@@ -273,14 +497,29 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * The Class JOIN.
+	 */
 	public static class JOIN extends RAXNode {
+		
+		/** The condition. */
 		protected String _condition;
 
+		/**
+		 * Instantiates a new join.
+		 *
+		 * @param condition the condition
+		 * @param input1 the input 1
+		 * @param input2 the input 2
+		 */
 		public JOIN(String condition, RAXNode input1, RAXNode input2) {
 			super(new ArrayList<RAXNode>(Arrays.asList(input1, input2)));
 			_condition = condition;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException {
 			if (_condition == null) {
 				// Natural join:
@@ -326,14 +565,25 @@ public abstract class RAXNode {
 			}
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			return "\\join_" + printRaId() + "{" + _condition + "}";
 		}
 		
+		/**
+		 * Gets the condition.
+		 *
+		 * @return the condition
+		 */
 		public String getCondition() {
 			return _condition;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			if (_condition == null || _condition.trim().equals("")) {
@@ -346,19 +596,38 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * The Class CROSS.
+	 */
 	public static class CROSS extends RAXNode {
+		
+		/**
+		 * Instantiates a new cross.
+		 *
+		 * @param input1 the input 1
+		 * @param input2 the input 2
+		 */
 		public CROSS(RAXNode input1, RAXNode input2) {
 			super(new ArrayList<RAXNode>(Arrays.asList(input1, input2)));
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException {
 			return "SELECT * FROM " + getChild(0).getViewName() + ", " + getChild(1).getViewName();
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			return "\\cross" + printRaId();
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			err.println("Cross operation not supported");
@@ -366,19 +635,38 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * The Class UNION.
+	 */
 	public static class UNION extends RAXNode {
+		
+		/**
+		 * Instantiates a new union.
+		 *
+		 * @param input1 the input 1
+		 * @param input2 the input 2
+		 */
 		public UNION(RAXNode input1, RAXNode input2) {
 			super(new ArrayList<RAXNode>(Arrays.asList(input1, input2)));
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException {
 			return "SELECT * FROM " + getChild(0).getViewName() + " UNION SELECT * FROM " + getChild(1).getViewName();
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			return "\\union" + printRaId();
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			err.println("Union operation not supported");
@@ -386,11 +674,24 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * The Class DIFF.
+	 */
 	public static class DIFF extends RAXNode {
+		
+		/**
+		 * Instantiates a new diff.
+		 *
+		 * @param input1 the input 1
+		 * @param input2 the input 2
+		 */
 		public DIFF(RAXNode input1, RAXNode input2) {
 			super(new ArrayList<RAXNode>(Arrays.asList(input1, input2)));
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException, ValidateException {
 			if (db.getDriverName().equals("com.mysql.jdbc.Driver")) {
 				// MySQL doesn't support EXCEPT, so we need a workaround.
@@ -419,10 +720,16 @@ public abstract class RAXNode {
 			}
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			return "\\diff" + printRaId();
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			err.println("Difference operation not supported");
@@ -430,11 +737,24 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * The Class INTERSECT.
+	 */
 	public static class INTERSECT extends RAXNode {
+		
+		/**
+		 * Instantiates a new intersect.
+		 *
+		 * @param input1 the input 1
+		 * @param input2 the input 2
+		 */
 		public INTERSECT(RAXNode input1, RAXNode input2) {
 			super(new ArrayList<RAXNode>(Arrays.asList(input1, input2)));
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException, ValidateException {
 			if (db.getDriverName().equals("com.mysql.jdbc.Driver")) {
 				// MySQL doesn't support INTERSECT, so we need a workaround.
@@ -462,10 +782,16 @@ public abstract class RAXNode {
 			}
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			return "\\intersect" + printRaId();
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			err.println("Intersect operation not supported");
@@ -473,14 +799,28 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * The Class RENAME.
+	 */
 	public static class RENAME extends RAXNode {
+		
+		/** The columns. */
 		protected String _columns;
 
+		/**
+		 * Instantiates a new rename.
+		 *
+		 * @param columns the columns
+		 * @param input the input
+		 */
 		public RENAME(String columns, RAXNode input) {
 			super(new ArrayList<RAXNode>(Arrays.asList(input)));
 			_columns = columns;
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewDef(ra.DB)
+		 */
 		public String genViewDef(DB db) throws SQLException, ValidateException {
 			if (db.getDriverName().equals("org.sqlite.JDBC")) {
 				// SQLite doesn't allows view column names to be
@@ -508,6 +848,9 @@ public abstract class RAXNode {
 			}
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#genViewCreateStatement(ra.DB)
+		 */
 		public String genViewCreateStatement(DB db) throws SQLException, ValidateException {
 			if (db.getDriverName().equals("org.sqlite.JDBC")) {
 				// See comments in genViewDef(DB):
@@ -517,10 +860,16 @@ public abstract class RAXNode {
 			}
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#toPrintString()
+		 */
 		public String toPrintString() {
 			return "\\rename_{" + _columns + "}";
 		}
 
+		/* (non-Javadoc)
+		 * @see ra.RAXNode#getOperator(java.util.Map, java.lang.String, java.lang.String)
+		 */
 		@Override
 		public RAOperator getOperator(Map<Integer, RAAnnotation> mapConstraints, String sbSchema, String realSchema) throws Exception {
 			err.println("Rename operation not supported");
@@ -528,6 +877,12 @@ public abstract class RAXNode {
 		}
 	}
 
+	/**
+	 * Parses the column names.
+	 *
+	 * @param columns the columns
+	 * @return the list
+	 */
 	public static List<String> parseColumnNames(String columns) {
 		String[] columnNames = columns.split("\\s*,\\s*");
 		return Arrays.asList(columnNames);
