@@ -1,6 +1,7 @@
 package edu.rit.wagen.graph;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,94 +10,121 @@ import java.util.Stack;
 import java.util.stream.Collectors;
 
 import org.jgrapht.Graph;
+import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.graph.SimpleGraph;
 
 import edu.rit.wagen.dto.Predicate;
 import edu.rit.wagen.utils.ConstraintSolver;
-import edu.rit.wagen.utils.Utils;
 
 /**
  * The Class GraphUtils.
- * 
  * @author Maria Cepeda
  */
 public class GraphUtils {
 
 	/**
-	 * Generate constrained bipartite graph.
+	 * Generate constrained bipartite graph 2.
 	 *
-	 * @param listVertices0
-	 *            the list vertices 0
-	 * @param listVertices1
-	 *            the list vertices 1
+	 * @param listVertices0 the list vertices 0
+	 * @param listVertices1 the list vertices 1
 	 * @return the graph
-	 * @throws Exception
-	 *             the exception
+	 * @throws Exception the exception
 	 */
-	public static Graph<String, List<Predicate>> generateConstrainedBipartiteGraph(List<String> listVertices0,
-			List<String> listVertices1) throws Exception {
-		Graph<String, List<Predicate>> graph = new SimpleGraph<>(List.class);
-		for (String v0 : listVertices0) {
+	public static Graph<GraphNode, DefaultEdge/* List<Predicate> */> generateConstrainedBipartiteGraph(
+			List<GraphNode> listVertices0, List<GraphNode> listVertices1) throws Exception {
+		Graph<GraphNode, DefaultEdge/* List<Predicate> */> graph = new SimpleGraph<>(DefaultEdge.class);
+		Map<String, Boolean> cacheMap = new HashMap<>();
+		// add vertices from the right
+		for (GraphNode v1 : listVertices1) {
+			graph.addVertex(v1);
+		}
+
+		for (GraphNode v0 : listVertices0) {
+			// System.out.println(new Date() + " inserting node " +
+			// v0.predicates);
+			boolean nodeConnected = Boolean.FALSE;
 			// add vertex to the left set
 			graph.addVertex(v0);
-			for (String v1 : listVertices1) {
-				// add vertex to the right set
-				graph.addVertex(v1);
-				// get predicates from the vertex to the left
-				List<Predicate> listPredicatesP0 = Utils.parsePredicate(v0);
-				// get predicates from the vertex to the right
-				List<Predicate> listPredicatesP1 = Utils.parsePredicate(v1);
+			// for (String key: mapPatternNodes.keySet()) {
+			for (GraphNode v1 : listVertices1) {
 				Stack<Predicate> stack = new Stack<>();
 				// push predicates from the right vertex into the stack
-				stack.addAll(listPredicatesP1);
+				stack.addAll(v1.predicates);
+				List<Predicate> predicatesUpdated = new ArrayList<>();
 				// replace symbols in the predicates from the right with the
 				// symbols from the predicates to the left
 				// we are trying to integrate these two tuples together, the
 				// symbols must be the same
+				Predicate pAux = null;
 				while (!stack.isEmpty()) {
-					Optional<Predicate> match = listPredicatesP0.stream()
+					Optional<Predicate> match = v0.predicates.stream()
 							.filter(p -> p.attribute.equals(stack.peek().attribute)).findFirst();
 					if (match.isPresent()) {
-						// update symbol value
-						stack.peek().symbol = match.get().symbol;
+						pAux = new Predicate(match.get().symbol, stack.peek().op, stack.peek().condition);
+						predicatesUpdated.add(pAux);
+						stack.pop();
+					} else {
+						String symbol = stack.peek().symbol.replaceAll("[0-9]", "");
+						String sequential = stack.peek().symbol.replaceAll(symbol, "");
+						pAux = new Predicate(symbol + sequential, stack.peek().op, stack.peek().condition);
+						predicatesUpdated.add(pAux);
 						stack.pop();
 					}
 				}
 				// union all the predicates from both vertices
 				List<Predicate> allPredicates = new ArrayList<>();
-				allPredicates.addAll(listPredicatesP0);
-				allPredicates.addAll(listPredicatesP1);
+				allPredicates.addAll(v0.predicates);
+				allPredicates.addAll(predicatesUpdated);
+				// formula using the attributes name, not the symbol (pattern)
+				String formula = allPredicates.stream().map(p -> p.getPattern()).collect(Collectors.joining(" and "));
 				try {
-					// checking if predicates are satisfiable
-					boolean isSat = ConstraintSolver.isSAT(allPredicates);
+					boolean isSat = Boolean.FALSE;
+					if (cacheMap.containsKey(formula)) {
+						isSat = cacheMap.get(formula);
+					} else {
+						// System.out.println(new Date() + " calling constraint
+						// solver, formula " + formula);
+						// checking if predicates are satisfiable
+						isSat = ConstraintSolver.isSAT(allPredicates);
+						// insert into the map
+						cacheMap.put(formula, isSat);
+					}
 					if (isSat) {
 						// adding edge to the graph
-						graph.addEdge(v0, v1, allPredicates);
+						// System.out.println("Adding edge" + allPredicates);
+						graph.addEdge(v0, v1/* , allPredicates */);
+						if (!nodeConnected) {
+							nodeConnected = Boolean.TRUE;
+						}
 					}
-				} catch (Exception e) {}
+				} catch (Exception e) {
+					e.printStackTrace();
+					throw (e);
+				}
+			}
+			if (!nodeConnected) {
+				throw new Exception("Error creating constrained bipartite graph: Unconnected node");
 			}
 		}
 		return graph;
 	}
 
 	/**
-	 * Find maximum satisfiable matching.
+	 * Find maximum satisfiable matching 2.
 	 *
-	 * @param graph
-	 *            the graph
-	 * @param vertices0
-	 *            the vertices 0
-	 * @param vertices1
-	 *            the vertices 1
+	 * @param graph the graph
+	 * @param vertices0 the vertices 0
+	 * @param vertices1 the vertices 1
 	 * @return the list
 	 */
-	public static List<Predicate> findMaximumSatisfiableMatching(Graph<String, List<Predicate>> graph,
-			List<String> vertices0, List<String> vertices1) {
+	public static List<Predicate> findMaximumSatisfiableMatching(
+			Graph<GraphNode, DefaultEdge/* List<Predicate> */> graph, List<GraphNode> vertices0,
+			List<GraphNode> vertices1) {
 		List<Predicate> result = new ArrayList<>();
 		// sort the left list of vertices by the number of neighbors
 		vertices0.sort((v0, v1) -> compareByVertexDegree(v0, v1, graph));
 		// finding a maximum satisfiable matching
-		Map<String, List<Predicate>> partialSolution = new HashMap<>();
+		Map<GraphNode, DefaultEdge/* List<Predicate> */> partialSolution = new HashMap<>();
 		result = findMatching(graph, vertices0, vertices1, partialSolution, 0, result);
 		return result;
 	}
@@ -104,44 +132,82 @@ public class GraphUtils {
 	/**
 	 * Find matching.
 	 *
-	 * @param graph
-	 *            the graph
-	 * @param vertices0
-	 *            the vertices 0
-	 * @param vertices1
-	 *            the vertices 1
-	 * @param partialSolution
-	 *            the partial solution
-	 * @param idxVertices0
-	 *            the idx vertices 0
-	 * @param solution
-	 *            the solution
+	 * @param graph the graph
+	 * @param vertices0 the vertices 0
+	 * @param vertices1 the vertices 1
+	 * @param partialSolution the partial solution
+	 * @param idxVertices0 the idx vertices 0
+	 * @param solution the solution
 	 * @return the list
 	 */
-	private static List<Predicate> findMatching(Graph<String, List<Predicate>> graph, List<String> vertices0,
-			List<String> vertices1, Map<String, List<Predicate>> partialSolution, int idxVertices0,
+	private static List<Predicate> findMatching(
+			Graph<GraphNode, DefaultEdge/* List<Predicate> */> graph, List<GraphNode> vertices0,
+			List<GraphNode> vertices1,
+			Map<GraphNode, DefaultEdge/* List<Predicate> */> partialSolution, int idxVertices0,
 			List<Predicate> solution) {
 		if (solution != null && solution.isEmpty()) {
 			if (idxVertices0 == vertices0.size()) {
 				// solution found, check it
-				List<Predicate> predicates = partialSolution.entrySet().stream().flatMap(e -> e.getValue().stream())
-						.collect(Collectors.toList());
+				// List<Predicate> predicates =
+				// partialSolution.entrySet().stream().flatMap(e ->
+				// e.getValue().stream())
+				// .collect(Collectors.toList());
+				List<Predicate> predicates = new ArrayList<>();
+				for (DefaultEdge e : partialSolution.values()) {
+					// left node
+					GraphNode u = graph.getEdgeSource(e);
+					// right node
+					GraphNode v = graph.getEdgeTarget(e);
+					// insert predicates from the left node into the list of
+					// predicates
+					predicates.addAll(u.predicates);
+					Stack<Predicate> stack = new Stack<>();
+					// push predicates from the right vertex into the stack
+					stack.addAll(v.predicates);
+					List<Predicate> predicatesUpdated = new ArrayList<>();
+					// replace symbols in the predicates from the right with the
+					// symbols from the predicates to the left
+					// we are trying to integrate these two tuples together, the
+					// symbols must be the same
+					Predicate pAux = null;
+					while (!stack.isEmpty()) {
+						Optional<Predicate> match = u.predicates.stream()
+								.filter(p -> p.attribute.equals(stack.peek().attribute)).findFirst();
+						if (match.isPresent()) {
+							pAux = new Predicate(match.get().symbol, stack.peek().op, stack.peek().condition);
+							predicatesUpdated.add(pAux);
+							stack.pop();
+						} else {
+							String symbol = stack.peek().symbol.replaceAll("[0-9]", "");
+							String sequential = stack.peek().symbol.replaceAll(symbol, "");
+							pAux = new Predicate(symbol + sequential, stack.peek().op, stack.peek().condition);
+							predicatesUpdated.add(pAux);
+							stack.pop();
+						}
+					}
+					// add predicates from the right node with the symbol update
+					predicates.addAll(predicatesUpdated);
+				}
+				System.out.println(predicates);
 				try {
 					boolean isSAT = ConstraintSolver.isSAT(predicates);
 					if (isSAT) {
+						// System.out.println(new Date() + " Solution found");
 						solution = predicates;
 					}
 				} catch (Exception e1) {
 					e1.printStackTrace();
 				}
 			} else {
-				String v0 = vertices0.get(idxVertices0);
+				// System.out.println("Index " + idxVertices0);
+				GraphNode v0 = vertices0.get(idxVertices0);
 				// for every neighbor of the vertex in the right side
-				for (List<Predicate> edge : graph.edgesOf(v0)) {
-					String v1 = graph.getEdgeTarget(edge);
-					//if the neighbor is free
+				for (DefaultEdge/* List<Predicate> */ edge : graph.edgesOf(v0)) {
+					GraphNode v1 = graph.getEdgeTarget(edge);
+					// if the neighbor is free and there is no solution
 					if (isFree(v1, partialSolution) && solution.isEmpty()) {
-						// mark the vertex and include it into the partial solution
+						// mark the vertex and include it into the partial
+						// solution
 						partialSolution.put(v1, edge);
 						// make recusion call
 						solution = findMatching(graph, vertices0, vertices1, partialSolution, idxVertices0 + 1,
@@ -158,28 +224,25 @@ public class GraphUtils {
 	/**
 	 * Checks if is free.
 	 *
-	 * @param vertex
-	 *            the vertex
-	 * @param partialSolution
-	 *            the partial solution
+	 * @param vertex the vertex
+	 * @param partialSolution the partial solution
 	 * @return true, if is free
 	 */
-	private static boolean isFree(String vertex, Map<String, List<Predicate>> partialSolution) {
+	private static boolean isFree(GraphNode vertex,
+			Map<GraphNode, DefaultEdge/* List<Predicate> */> partialSolution) {
 		return partialSolution.get(vertex) == null;
 	}
 
 	/**
 	 * Compare by vertex degree.
 	 *
-	 * @param v0
-	 *            the v 0
-	 * @param v1
-	 *            the v 1
-	 * @param graph
-	 *            the graph
+	 * @param v0 the v 0
+	 * @param v1 the v 1
+	 * @param graph the graph
 	 * @return the int
 	 */
-	private static int compareByVertexDegree(String v0, String v1, Graph<String, List<Predicate>> graph) {
+	private static int compareByVertexDegree(GraphNode v0, GraphNode v1,
+			Graph<GraphNode, DefaultEdge/* List<Predicate> */> graph) {
 		return Integer.compare(graph.degreeOf(v0), graph.degreeOf(v1));
 	}
 }

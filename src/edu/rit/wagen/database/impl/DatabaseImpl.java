@@ -8,7 +8,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +25,6 @@ import edu.rit.wagen.utils.Utils.ConstraintType;
 
 /**
  * The Class DatabaseImpl.
- * 
  * @author Maria Cepeda
  */
 public class DatabaseImpl implements Database {
@@ -35,7 +34,7 @@ public class DatabaseImpl implements Database {
 	private static final String DRIVER = "com.mysql.jdbc.Driver";
 
 	/** The Constant URL. */
-	private final static String URL = "jdbc:mysql://localhost/?zeroDateTimeBehavior=convertToNull";
+	private final static String URL = "jdbc:mysql://localhost/?zeroDateTimeBehavior=convertToNull&rewriteBatchedStatements=true";
 
 	/** The Constant USER. */
 	private final static String USER = "root";
@@ -46,6 +45,15 @@ public class DatabaseImpl implements Database {
 	/** The Constant PTABLE. */
 	private final static String PTABLE = "CREATE TABLE <SCHEMA_NAME>.PTABLE (ATTRIBUTE VARCHAR(100), SYMBOL VARCHAR(100), PREDICATE varchar(200))";
 
+	/** The Constant SYMBOL_INDEX. */
+	private final static String SYMBOL_INDEX = "CREATE INDEX IDX_SYMBOL ON <SCHEMA_NAME>.PTABLE (SYMBOL)";
+	
+	/** The Constant ATT_INDEX. */
+	private final static String ATT_INDEX = "CREATE INDEX IDX_ATT ON <SCHEMA_NAME>.PTABLE (ATTRIBUTE)";
+
+	/** The conn. */
+	private Connection conn;
+
 	static {
 		try {
 			Class.forName(DRIVER).newInstance();
@@ -54,25 +62,31 @@ public class DatabaseImpl implements Database {
 		}
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#execCommands(java.util.List)
+	 */
 	public void execCommands(List<String> commands) throws SQLException {
 		Connection conn = null;
 		PreparedStatement ps = null;
 		try {
-			Connection connection = getConnection();
-			Statement statement = connection.createStatement();
-
-			for (String command : commands) {
-				statement.addBatch(command);
+			conn = getConnection();
+			conn.setAutoCommit(false);
+			int counter = 1;
+			for (String insert : commands) {
+				ps = conn.prepareStatement(insert);
+				ps.executeUpdate();
+				if (counter > 1000) {
+					conn.commit();
+					counter = 1;
+				}
 			}
-			statement.executeBatch();
-
+			conn.commit();
 		} catch (SQLException e) {
 			e.printStackTrace();
 			throw e;
 		} finally {
 			if (conn != null) {
 				conn.rollback();
-				conn.close();
 			}
 			if (ps != null) {
 				ps.close();
@@ -80,20 +94,119 @@ public class DatabaseImpl implements Database {
 		}
 	}
 
-	public void execCommand(String command) throws SQLException {
+	/**
+	 * Exec commands 2.
+	 *
+	 * @param stmts the stmts
+	 * @throws SQLException the SQL exception
+	 */
+	public void execCommands2(List<String> stmts) throws SQLException {
 		Connection conn = null;
 		PreparedStatement ps = null;
 		try {
 			conn = getConnection();
-			ps = conn.prepareStatement(command);
-			ps.execute();
+			conn.setAutoCommit(false);
+			final int batchSize = 1000;
+			int count = 0;
+
+			for (String stmt : stmts) {
+				ps = conn.prepareStatement(stmt);
+				ps.addBatch();
+				if (count++ == batchSize) {
+					ps.executeBatch();
+					ps.clearBatch();
+					conn.commit();
+					count = 0;
+				}
+			}
+			if (count > 0) {
+				ps.executeBatch();
+			}
+			conn.commit();
 		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} catch (Exception e) {
 			e.printStackTrace();
 			throw e;
 		} finally {
 			if (conn != null) {
-				conn.close();
+				conn.rollback();
 			}
+			if (ps != null) {
+				ps.close();
+			}
+		}
+	}
+
+	/**
+	 * Exec updates.
+	 *
+	 * @param stmt the stmt
+	 * @param data the data
+	 * @throws SQLException the SQL exception
+	 */
+	public void execUpdates(String stmt, List<List<String>> data) throws SQLException {
+		Connection conn = null;
+		PreparedStatement ps = null;
+		try {
+			conn = getConnection();
+			conn.setAutoCommit(false);
+			ps = conn.prepareStatement(stmt);
+
+			final int batchSize = 5000;
+			int count = 0;
+
+			for (List<String> tuple : data) {
+				int idx = 0;
+				while (idx < tuple.size()) {
+					ps.setString(idx + 1, tuple.get(idx));
+					idx++;
+				}
+				ps.addBatch();
+				if (count++ == batchSize) {
+					ps.executeBatch();
+					ps.clearBatch();
+					conn.commit();
+					count = 0;
+				}
+			}
+			if (count > 0) {
+				ps.executeBatch();
+			}
+			conn.commit();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (conn != null) {
+				conn.rollback();
+			}
+			if (ps != null) {
+				ps.close();
+			}
+		}
+	}
+
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#execCommand(java.lang.String)
+	 */
+	public void execCommand(String command) throws SQLException {
+		// System.out.println(command);
+		Connection conn = null;
+		Statement ps = null;
+		try {
+			conn = getConnection();
+			conn.setAutoCommit(Boolean.TRUE);
+			ps = conn.createStatement();
+			ps.executeUpdate(command);
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
 			if (ps != null) {
 				ps.close();
 			}
@@ -118,9 +231,6 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (ps != null) {
 				ps.close();
 			}
@@ -142,56 +252,34 @@ public class DatabaseImpl implements Database {
 			// create user table
 			String sqlCreateTable = createTableString(tableSchema);
 			ps = conn.prepareStatement(sqlCreateTable);
-			created = ps.execute();
+			ps.addBatch();
+
+			List<Constraint> fkList = tableSchema.getConstraints().stream()
+					.filter(c -> c.type.equals(ConstraintType.FK)).collect(Collectors.toList());
+			for (Constraint c : fkList) {
+				StringBuffer index = new StringBuffer("create index idx_");
+				index.append(c.column).append(" on ").append(tableSchema.getSchemaName()).append(".")
+						.append(tableSchema.getTableName()).append("(").append(c.column).append(")");
+				ps.addBatch(index.toString());
+			}
+
+			int[] results = ps.executeBatch();
+			created = results[0] >= 0 ? true : false;
+
 		} catch (SQLException e) {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (ps != null) {
 				ps.close();
 			}
 		}
-		return !created;
+		return created;
 	}
 
-	/**
-	 * Execute a batch of inserts.
-	 *
-	 * @param inserts
-	 *            the inserts
-	 * @throws SQLException
-	 *             the SQL exception
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getOutputSchema(java.lang.String, java.lang.String)
 	 */
-	public void insertSymbolicData(List<String> inserts) throws SQLException {
-		Connection conn = null;
-		PreparedStatement ps = null;
-
-		try {
-			Connection connection = getConnection();
-			Statement statement = connection.createStatement();
-
-			for (String insert : inserts) {
-				statement.addBatch(insert);
-			}
-			statement.executeBatch();
-
-		} catch (SQLException e) {
-			e.printStackTrace();
-			throw e;
-		} finally {
-			if (conn != null) {
-				conn.close();
-			}
-			if (ps != null) {
-				ps.close();
-			}
-		}
-
-	}
-
 	public TableSchema getOutputSchema(String schema, String table) throws SQLException {
 		ArrayList<String> colNames = new ArrayList<String>();
 		ArrayList<String> colTypes = new ArrayList<String>();
@@ -209,8 +297,10 @@ public class DatabaseImpl implements Database {
 				// For some JDBC drivers,
 				// getColumnName()
 				// gives the original column names inside base tables.
-				colNames.add(rsmd.getColumnName(i));
-				colTypes.add(rsmd.getColumnTypeName(i));
+				if (!rsmd.getColumnName(i).toUpperCase().equals("ID_SDB")) {
+					colNames.add(rsmd.getColumnName(i));
+					colTypes.add(rsmd.getColumnTypeName(i));
+				}
 			}
 			rs.close();
 			// get constraints info
@@ -228,16 +318,17 @@ public class DatabaseImpl implements Database {
 				String constraint = rs.getString(2);
 				String referenced_column = rs.getString(3);
 				String reference_table = rs.getString(4);
-				colContraints.add(
-						new Constraint(Utils.getConstraint(constraint), column, referenced_column, reference_table));
+				// id column in the symbolic database is an internal column, do
+				// not include it in the result
+				if (!column.toUpperCase().equals("ID_SDB")) {
+					colContraints.add(new Constraint(Utils.getConstraint(constraint), column, referenced_column,
+							reference_table));
+				}
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
@@ -245,10 +336,11 @@ public class DatabaseImpl implements Database {
 		return new TableSchema(schema, table, colNames, colTypes, colContraints);
 	}
 
-	// TODO MJCG Maybe this method is not neccessary, check if this info in the
-	// TableSchema
-	public TableSchema getReferencerTable(String realSchema, TableSchema table, String referencedColumn)
-			throws SQLException {
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getReferencerTable(java.lang.String, edu.rit.wagen.dto.TableSchema, java.lang.String, java.lang.String)
+	 */
+	public TableSchema getReferencerTable(String realSchema, TableSchema table, String referencedColumn,
+			String referencerColumn) throws SQLException {
 		Connection conn = null;
 		PreparedStatement s = null;
 		String referencedTable = null;
@@ -257,11 +349,12 @@ public class DatabaseImpl implements Database {
 			conn = getConnection();
 			String query = new String(
 					"select table_name from information_schema.key_column_usage where table_schema = ? "
-							+ "and referenced_table_name = ? and referenced_column_name = ?");
+							+ "and referenced_table_name = ? and referenced_column_name = ? and column_name = ?");
 			s = conn.prepareStatement(query);
 			s.setString(1, realSchema);
 			s.setString(2, table.getTableName());
 			s.setString(3, referencedColumn);
+			s.setString(4, referencerColumn);
 			ResultSet rs = s.executeQuery();
 			if (rs.next()) {
 				referencedTable = rs.getString(1);
@@ -274,9 +367,6 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
@@ -284,6 +374,9 @@ public class DatabaseImpl implements Database {
 		return tableR;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getSymbolValueCache(java.lang.String, java.lang.String)
+	 */
 	public String getSymbolValueCache(String schema, String symbol) throws SQLException {
 		Connection conn = null;
 		PreparedStatement s = null;
@@ -302,9 +395,6 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
@@ -312,6 +402,9 @@ public class DatabaseImpl implements Database {
 		return value;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getData(edu.rit.wagen.dto.TableSchema)
+	 */
 	public List<Tuple> getData(TableSchema table) throws SQLException {
 		Connection conn = null;
 		Statement statement = null;
@@ -326,7 +419,7 @@ public class DatabaseImpl implements Database {
 				Map<String, String> m = new HashMap<>();
 				for (String attr : table.getColNames()) {
 					String value = rs.getString(attr);
-					m.put(attr, value);
+					m.put(attr, value.replaceAll("'", ""));
 				}
 				Tuple tuple = new Tuple();
 				tuple.setValues(m);
@@ -337,9 +430,6 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (statement != null) {
 				statement.close();
 			}
@@ -347,42 +437,72 @@ public class DatabaseImpl implements Database {
 		return data;
 	}
 
-	public List<Tuple> getTuplesForUpdate(TableSchema table, String column) throws Exception {
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getData(edu.rit.wagen.dto.TableSchema, int, int)
+	 */
+	public List<Tuple> getData(TableSchema table, int page, int offset) throws SQLException {
+		Connection conn = null;
+		PreparedStatement statement = null;
+		List<Tuple> data = new ArrayList<Tuple>();
+		try {
+			conn = getConnection();
+			String sql = "select * from " + table.getSchemaName() + "." + table.getTableName()
+					+ " order by id_sdb limit ?, ?";
+			statement = conn.prepareStatement(sql);
+			statement.setInt(1, page);
+			statement.setInt(2, offset);
+			ResultSet rs = statement.executeQuery();
+			while (rs.next()) {
+				Map<String, String> m = new HashMap<>();
+				for (String attr : table.getColNames()) {
+					m.put(attr, rs.getString(attr));
+				}
+				Tuple tuple = new Tuple();
+				tuple.setValues(m);
+				data.add(tuple);
+			}
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (statement != null) {
+				statement.close();
+			}
+		}
+		return data;
+	}
+
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#countData(edu.rit.wagen.dto.TableSchema)
+	 */
+	public int countData(TableSchema table) throws SQLException {
 		Connection conn = null;
 		Statement statement = null;
-		List<Tuple> data = new ArrayList<Tuple>();
+		int counter = 0;
 		try {
 			conn = getConnection();
 			statement = conn.createStatement();
 
-			String sql = "select * from " + table.getSchemaName() + "." + table.getTableName() + " where " + column
-					+ " like '" + column + "%'";
+			String sql = "select count(*) from " + table.getSchemaName() + "." + table.getTableName();
 			ResultSet rs = statement.executeQuery(sql);
-			while (rs.next()) {
-				Map<String, String> m = new HashMap<>();
-				for (String attr : table.getColNames()) {
-					String value = rs.getString(attr);
-					m.put(attr, value);
-				}
-				Tuple tuple = new Tuple();
-				tuple.setValues(m);
-				data.add(tuple);
+			if (rs.next()) {
+				counter = rs.getInt(1);
 			}
-
 		} catch (SQLException e) {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (statement != null) {
 				statement.close();
 			}
 		}
-		return data;
+		return counter;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getPredicateValueCache(java.lang.String, java.lang.String)
+	 */
 	public String getPredicateValueCache(String schema, String pattern) throws SQLException {
 		Connection conn = null;
 		PreparedStatement ps = null;
@@ -401,9 +521,6 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (ps != null) {
 				ps.close();
 			}
@@ -411,74 +528,26 @@ public class DatabaseImpl implements Database {
 		return symbol;
 	}
 
-	@Override
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#insertConstraints(java.lang.String, java.util.List)
+	 */
 	public void insertConstraints(String schemaName, List<PTable> constraints) throws SQLException {
-		Connection conn = null;
-		PreparedStatement ps = null;
+		StringBuffer insert = new StringBuffer("insert into ").append(schemaName)
+				.append(".PTable (attribute, symbol, predicate) values (?,?,?)");
 
-		try {
-			conn = getConnection();
-			// creating insert sql statement
-			StringBuffer insert = new StringBuffer("insert into ").append(schemaName)
-					.append(".PTable (attribute, symbol, predicate) values ('%3','%1','%2')");
-			ps = conn.prepareStatement(insert.toString());
-			// adding every insert into the batch
-			for (PTable t : constraints) {
-				String s = insert.toString().replaceAll("%1", t.symbol).replaceAll("%2", t.predicate).replaceAll("%3",
-						t.attribute);
-				ps.addBatch(s);
-			}
-			// executing the batch
-			ps.executeBatch();
-
-		} catch (SQLException e) {
-			e.printStackTrace();
-			throw e;
-		} finally {
-			if (conn != null) {
-				conn.close();
-			}
-			if (ps != null) {
-				ps.close();
-			}
+		List<List<String>> data = new ArrayList<>();
+		List<String> row = null;
+		// adding every insert into the batch
+		for (PTable t : constraints) {
+			row = Arrays.asList(t.attribute, t.symbol, t.predicate);
+			data.add(row);
 		}
+		execUpdates(insert.toString(), data);
 	}
 
-	// public void insertData (String schemaName, String tableName, List<Tuple>
-	// data) throws SQLException {
-	// Connection conn = null;
-	// PreparedStatement ps = null;
-	//
-	// try {
-	// // TODO This method will the method to insert data in the final concrete
-	// database
-	// conn = getConnection();
-	// // creating insert sql statement
-	// StringBuffer insert = new StringBuffer("insert into ").append(schemaName)
-	// .append(".").append("PTable (symbol, predicate) values ('%1','%2')");
-	// ps = conn.prepareStatement(insert.toString());
-	// // adding every insert into the batch
-	// for (PTable t : constraints) {
-	// String s = insert.toString().replaceAll("%1", t.symbol).replaceAll("%2",
-	// t.predicate);
-	// ps.addBatch(s);
-	// }
-	// // executing the batch
-	// ps.executeBatch();
-	//
-	// } catch (SQLException e) {
-	// e.printStackTrace();
-	// throw e;
-	// } finally {
-	// if (conn != null) {
-	// conn.close();
-	// }
-	// if (ps != null) {
-	// ps.close();
-	// }
-	// }
-	// }
-	//
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#insertSymbolicValueCache(java.lang.String, java.lang.String, java.lang.String)
+	 */
 	public void insertSymbolicValueCache(String schemaName, String symbol, String value) throws SQLException {
 		Connection conn = null;
 		PreparedStatement ps = null;
@@ -493,40 +562,60 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (ps != null) {
 				ps.close();
 			}
 		}
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#poseQuery(java.lang.String)
+	 */
+	public int poseQuery(String sql) throws SQLException {
+		Connection conn = null;
+		Statement statement = null;
+		int cardinality = 0;
+		try {
+			conn = getConnection();
+			statement = conn.createStatement();
+			// creating insert sql statement
+			ResultSet rs = statement.executeQuery(sql);
+			if (rs.next()) {
+				cardinality = rs.getInt(1);
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (statement != null) {
+				statement.close();
+			}
+		}
+		return cardinality;
+	}
+
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getTableList(java.lang.String)
+	 */
 	public List<TableSchema> getTableList(String schema) throws SQLException {
 		Connection conn = null;
 		PreparedStatement s = null;
 		List<TableSchema> tableList = new ArrayList<>();
 		try {
 			conn = getConnection();
-			String query = new String("select table_name from information_schema.tables where table_schema = ? and table_name <> 'PTable'");
+			String query = new String(
+					"select table_name from information_schema.tables where table_schema = ? and table_name <> 'PTable'");
 			s = conn.prepareStatement(query);
 			s.setString(1, schema);
 			ResultSet rs = s.executeQuery();
 			while (rs.next()) {
 				tableList.add(getOutputSchema(schema, rs.getString(1)));
 			}
-			// TODO MJCG Find a way to order the table statements so I do not
-			// have problems with constraints
-			// sort the list so there is no problems with the foreign keys
-			tableList.sort(
-					Comparator.comparing(t -> t.getConstraints(ConstraintType.FK), Comparator.comparing(List::size)));
+
 		} catch (SQLException e) {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
@@ -534,7 +623,10 @@ public class DatabaseImpl implements Database {
 		return tableList;
 	}
 
-	public boolean existTable(TableSchema table) throws Exception {
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#existTable(edu.rit.wagen.dto.TableSchema)
+	 */
+	public boolean existTable(TableSchema table) throws SQLException {
 		Connection conn = null;
 		PreparedStatement s = null;
 		boolean exists = Boolean.FALSE;
@@ -551,9 +643,6 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
@@ -561,6 +650,9 @@ public class DatabaseImpl implements Database {
 		return exists;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getPredicates(java.lang.String, java.lang.String)
+	 */
 	public List<Predicate> getPredicates(String schema, String symbol) throws Exception {
 		Connection conn = null;
 		PreparedStatement s = null;
@@ -582,9 +674,6 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
@@ -592,31 +681,30 @@ public class DatabaseImpl implements Database {
 		return predicateList;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getAttributesPredicates(java.util.List, java.lang.String)
+	 */
 	public List<String> getAttributesPredicates(List<String> atts, String schema) throws Exception {
 		Connection conn = null;
 		PreparedStatement s = null;
 		List<String> attsList = null;
 		try {
 			conn = getConnection();
-			String query = new String("select distinct attribute from " + schema + ".ptable where attribute = ?");
+			String query = new String("select distinct attribute from " + schema + ".ptable where attribute in (?)");
+			String inClause = atts.stream().map(att -> "'" + att + "'").collect(Collectors.joining(", "));
+			query = query.replace("?", inClause);
 			s = conn.prepareStatement(query);
-			for (String a: atts) {
-				s.setString(1, a);
-				ResultSet rs = s.executeQuery();
-				while (rs.next()) {
-					if (attsList == null) {
-						attsList = new ArrayList<>();
-					}
-					attsList.add(rs.getString(1));
+			ResultSet rs = s.executeQuery();
+			while (rs.next()) {
+				if (attsList == null) {
+					attsList = new ArrayList<>();
 				}
+				attsList.add(rs.getString(1));
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
@@ -624,6 +712,9 @@ public class DatabaseImpl implements Database {
 		return attsList;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getPredicates(java.lang.String)
+	 */
 	public List<Predicate> getPredicates(String schema) throws Exception {
 		Connection conn = null;
 		PreparedStatement s = null;
@@ -643,9 +734,6 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
@@ -653,6 +741,9 @@ public class DatabaseImpl implements Database {
 		return predicateList;
 	}
 
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#getSymbols(java.lang.String)
+	 */
 	public List<String> getSymbols(String schema) throws Exception {
 		Connection conn = null;
 		PreparedStatement s = null;
@@ -673,30 +764,38 @@ public class DatabaseImpl implements Database {
 			e.printStackTrace();
 			throw e;
 		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 			if (s != null) {
 				s.close();
 			}
 		}
 		return predicateList;
 	}
-	
+
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#createPTable(java.lang.String)
+	 */
 	public void createPTable(String schemaName) throws SQLException {
 		execCommand(PTABLE.replaceAll("<SCHEMA_NAME>", schemaName));
+		execCommand(SYMBOL_INDEX.replaceAll("<SCHEMA_NAME>", schemaName));
+		execCommand(ATT_INDEX.replaceAll("<SCHEMA_NAME>", schemaName));
+	}
+
+	/* (non-Javadoc)
+	 * @see edu.rit.wagen.dabatase.iapi.Database#closedConnnection()
+	 */
+	public void closedConnnection() throws SQLException {
+		conn.close();
 	}
 
 	/**
 	 * Creates the table string.
 	 *
-	 * @param table
-	 *            the table
+	 * @param table the table
 	 * @return the string
 	 */
 	private String createTableString(TableSchema table) {
 		StringBuffer sb = new StringBuffer("CREATE TABLE ").append(table.getSchemaName()).append(".")
-				.append(table.getTableName()).append("( ");
+				.append(table.getTableName()).append("( id_sdb int primary key auto_increment, ");
 		String columns = table.getColNames().stream().collect(Collectors.joining(" varchar(200), "));
 		sb.append(columns);
 		sb.append(" varchar(200))");
@@ -707,10 +806,12 @@ public class DatabaseImpl implements Database {
 	 * Gets the connection.
 	 *
 	 * @return the connection
-	 * @throws SQLException
-	 *             the SQL exception
+	 * @throws SQLException the SQL exception
 	 */
 	private Connection getConnection() throws SQLException {
-		return DriverManager.getConnection(URL, USER, PASSWORD);
+		if (conn == null) {
+			conn = DriverManager.getConnection(URL, USER, PASSWORD);
+		}
+		return conn;
 	}
 }
